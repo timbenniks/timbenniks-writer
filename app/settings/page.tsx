@@ -36,6 +36,21 @@ function SettingsPageContent() {
     message: string;
   }>({ type: null, message: "" });
 
+  // AI settings state
+  const [aiSettings, setAiSettings] = useState({
+    model: "gpt-5.1",
+    temperature: 0.7,
+    reasoningEffort: "none" as "none" | "low" | "medium" | "high",
+    verbosity: "medium" as "low" | "medium" | "high",
+    toneInstructions: "",
+  });
+  const [isTestingAI, setIsTestingAI] = useState(false);
+  const [aiTestStatus, setAiTestStatus] = useState<{
+    type: "success" | "error" | null;
+    message: string;
+  }>({ type: null, message: "" });
+  const [toneInstructionsSaved, setToneInstructionsSaved] = useState(false);
+
   // Load config from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem("githubConfig");
@@ -46,6 +61,27 @@ function SettingsPageContent() {
       } catch (e) {
         console.error("Failed to parse saved GitHub config:", e);
       }
+    }
+
+    // Load AI settings
+    const savedAISettings = localStorage.getItem("aiSettings");
+    if (savedAISettings) {
+      try {
+        const parsed = JSON.parse(savedAISettings);
+        setAiSettings(parsed);
+      } catch (e) {
+        console.error("Failed to parse saved AI settings:", e);
+      }
+    } else {
+      // Load default tone instructions if none exist
+      import("../utils/toneInstructions").then((module) => {
+        const defaultSettings = {
+          ...aiSettings,
+          toneInstructions: module.DEFAULT_TONE_INSTRUCTIONS,
+        };
+        setAiSettings(defaultSettings);
+        localStorage.setItem("aiSettings", JSON.stringify(defaultSettings));
+      });
     }
   }, []);
 
@@ -268,6 +304,62 @@ function SettingsPageContent() {
         type: "error",
         message: error.message || "Failed to disconnect",
       });
+    }
+  };
+
+  // AI settings handlers
+  const updateAISetting = (key: string, value: any) => {
+    const updated = { ...aiSettings, [key]: value };
+    setAiSettings(updated);
+    localStorage.setItem("aiSettings", JSON.stringify(updated));
+  };
+
+  const testAIConnection = async () => {
+    setIsTestingAI(true);
+    setAiTestStatus({ type: null, message: "" });
+
+    try {
+      const response = await fetch("/api/openai/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: "user",
+              content: "Hello! Please respond with a brief confirmation that you're working.",
+            },
+          ],
+          model: aiSettings.model,
+          temperature: aiSettings.temperature,
+          maxTokens: 100,
+          toneInstructions: aiSettings.toneInstructions,
+          reasoning: { effort: aiSettings.reasoningEffort },
+          text: { verbosity: aiSettings.verbosity },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setAiTestStatus({
+          type: "success",
+          message: "AI connection successful! OpenAI API is working correctly.",
+        });
+      } else {
+        setAiTestStatus({
+          type: "error",
+          message: data.error || "Failed to connect to OpenAI",
+        });
+      }
+    } catch (error: any) {
+      setAiTestStatus({
+        type: "error",
+        message: error.message || "Failed to test AI connection",
+      });
+    } finally {
+      setIsTestingAI(false);
     }
   };
 
@@ -576,6 +668,191 @@ function SettingsPageContent() {
                 {googleMessage.message}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* AI Writing Assistant */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+              AI Writing Assistant
+            </h2>
+            <p className="text-gray-600">
+              Configure OpenAI settings and tone of voice instructions for AI-powered writing assistance.
+            </p>
+          </div>
+
+          <div className="space-y-6">
+            {/* Model Selection */}
+            <div>
+              <label htmlFor="ai-model" className="block text-sm font-medium text-gray-700 mb-2">
+                Model
+              </label>
+              <select
+                id="ai-model"
+                value={aiSettings.model}
+                onChange={(e) => updateAISetting("model", e.target.value)}
+                className={INPUT_CLASSES}
+              >
+                <option value="gpt-5.1">GPT-5.1</option>
+                <option value="gpt-4o">GPT-4o</option>
+                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Select the OpenAI model to use for AI assistance
+              </p>
+            </div>
+
+            {/* Temperature */}
+            <div>
+              <label htmlFor="ai-temperature" className="block text-sm font-medium text-gray-700 mb-2">
+                Temperature: {aiSettings.temperature}
+              </label>
+              <input
+                id="ai-temperature"
+                type="range"
+                min="0"
+                max="2"
+                step="0.1"
+                value={aiSettings.temperature}
+                onChange={(e) => updateAISetting("temperature", parseFloat(e.target.value))}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>Focused (0.0)</span>
+                <span>Balanced (1.0)</span>
+                <span>Creative (2.0)</span>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Controls randomness. Lower = more focused, Higher = more creative
+              </p>
+            </div>
+
+            {/* Reasoning Effort */}
+            <div>
+              <label htmlFor="ai-reasoning-effort" className="block text-sm font-medium text-gray-700 mb-2">
+                Reasoning Effort
+              </label>
+              <select
+                id="ai-reasoning-effort"
+                value={aiSettings.reasoningEffort}
+                onChange={(e) => updateAISetting("reasoningEffort", e.target.value)}
+                className={INPUT_CLASSES}
+              >
+                <option value="none">None - Lowest latency, fastest responses (default)</option>
+                <option value="low">Low - Quick responses, fewer reasoning tokens</option>
+                <option value="medium">Medium - Balanced reasoning</option>
+                <option value="high">High - Thorough reasoning, more tokens</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Controls how many reasoning tokens are generated before the response. Lower = faster, higher = more thorough.
+                <br />
+                <span className="text-gray-400 italic">
+                  Tip: With "none", encourage the model to "think" or outline steps in your prompts for better quality.
+                </span>
+              </p>
+            </div>
+
+            {/* Verbosity */}
+            <div>
+              <label htmlFor="ai-verbosity" className="block text-sm font-medium text-gray-700 mb-2">
+                Verbosity
+              </label>
+              <select
+                id="ai-verbosity"
+                value={aiSettings.verbosity}
+                onChange={(e) => updateAISetting("verbosity", e.target.value)}
+                className={INPUT_CLASSES}
+              >
+                <option value="low">Low - Concise answers, shorter code (SQL queries, simple generation)</option>
+                <option value="medium">Medium - Balanced detail (default)</option>
+                <option value="high">High - Thorough explanations, longer structured code with inline comments</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Controls how many output tokens are generated. Lower = faster, more concise. Higher = more detailed, thorough.
+                <br />
+                <span className="text-gray-400 italic">
+                  Use high for document explanations or extensive code refactoring. Use low for concise answers or simple code.
+                </span>
+              </p>
+            </div>
+
+            {/* Tone of Voice Instructions */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label htmlFor="ai-tone" className="block text-sm font-medium text-gray-700">
+                  Tone of Voice Instructions
+                </label>
+                <div className="flex items-center gap-3">
+                  {toneInstructionsSaved && (
+                    <span className="text-xs text-green-600 flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Saved
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const { DEFAULT_TONE_INSTRUCTIONS } = await import("../utils/toneInstructions");
+                      updateAISetting("toneInstructions", DEFAULT_TONE_INSTRUCTIONS);
+                      setToneInstructionsSaved(true);
+                      setTimeout(() => setToneInstructionsSaved(false), 2000);
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Load Default Instructions
+                  </button>
+                </div>
+              </div>
+              <textarea
+                id="ai-tone"
+                rows={12}
+                value={aiSettings.toneInstructions}
+                onChange={(e) => {
+                  updateAISetting("toneInstructions", e.target.value);
+                  setToneInstructionsSaved(true);
+                  setTimeout(() => setToneInstructionsSaved(false), 2000);
+                }}
+                placeholder="Describe your writing style, tone, voice, and any specific guidelines..."
+                className={`${INPUT_CLASSES} font-mono text-sm`}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Changes are saved automatically. These instructions will be included in all AI prompts to ensure consistent tone and style.
+                <br />
+                <span className="text-gray-400 italic">
+                  Default instructions include Tim Benniks' writing style, structure, and guidelines from The Composable Writer.
+                </span>
+              </p>
+            </div>
+
+            {/* Test Connection */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={testAIConnection}
+                disabled={isTestingAI}
+                className={clsx(
+                  BUTTON_PRIMARY_CLASSES,
+                  isTestingAI && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                {isTestingAI ? "Testing..." : "Test Connection"}
+              </button>
+              {aiTestStatus.type && (
+                <div
+                  className={clsx(
+                    "px-4 py-2 rounded-md text-sm",
+                    aiTestStatus.type === "success"
+                      ? "bg-green-50 text-green-800 border border-green-200"
+                      : "bg-red-50 text-red-800 border border-red-200"
+                  )}
+                >
+                  {aiTestStatus.message}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </main>
