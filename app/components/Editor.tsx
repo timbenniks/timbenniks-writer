@@ -430,12 +430,8 @@ const FormatIcon = () => (
 
 const MenuBar = ({ 
   editor,
-  isAIChatOpen,
-  onToggleAIChat,
 }: { 
   editor: TipTapEditor | null;
-  isAIChatOpen?: boolean;
-  onToggleAIChat?: () => void;
 }) => {
   const [linkUrl, setLinkUrl] = useState("");
   const [showLinkInput, setShowLinkInput] = useState(false);
@@ -906,38 +902,6 @@ const MenuBar = ({
         </button>
       </div>
 
-      {/* AI Chat Button */}
-      {onToggleAIChat && (
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onToggleAIChat}
-            className={clsx(
-              "p-2 rounded-md transition-colors",
-              isAIChatOpen
-                ? "bg-gray-900 text-white"
-                : "text-gray-700 hover:bg-gray-100"
-            )}
-            aria-label="Open AI chat"
-            aria-pressed={isAIChatOpen}
-            title="AI Writing Assistant"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              {/* Main sparkle/star */}
-              <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" />
-              {/* Small sparkle stars around */}
-              <circle cx="6" cy="6" r="1" />
-              <circle cx="18" cy="6" r="1" />
-              <circle cx="6" cy="18" r="1" />
-              <circle cx="18" cy="18" r="1" />
-            </svg>
-          </button>
-        </div>
-      )}
     </div>
   );
 };
@@ -953,9 +917,7 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
   const [isMarkdownOpen, setIsMarkdownOpen] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
-  const [selectedText, setSelectedText] = useState<string>("");
   const [hasFirstVersion, setHasFirstVersion] = useState(false);
   const lastScrollYRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1660,37 +1622,6 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
     return () => clearInterval(interval);
   }, [currentFilePath, githubConfig, currentFileSha, isNewFile]);
 
-  // Track text selection when chat is open
-  useEffect(() => {
-    if (!editor || !isAIChatOpen) {
-      setSelectedText("");
-      return;
-    }
-
-    const updateSelection = () => {
-      const { selection } = editor.state;
-      const { from, to } = selection;
-
-      if (from !== to && from < to) {
-        const text = editor.state.doc.textBetween(from, to, " ");
-        if (text.trim().length > 10) {
-          setSelectedText(text);
-        } else {
-          setSelectedText("");
-        }
-      } else {
-        setSelectedText("");
-      }
-    };
-
-    editor.on("selectionUpdate", updateSelection);
-    editor.on("update", updateSelection);
-
-    return () => {
-      editor.off("selectionUpdate", updateSelection);
-      editor.off("update", updateSelection);
-    };
-  }, [editor, isAIChatOpen]);
 
 
   // Create scroll handler function
@@ -1758,7 +1689,7 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Header Bar - Hide during onboarding */}
       {!(isNewFile && !hasFirstVersion) && (
         <header
@@ -2170,32 +2101,22 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
             top: isHeaderVisible ? `${HEADER_HEIGHT}px` : "0px",
           }}
         >
-          <MenuBar 
-            editor={editor}
-            isAIChatOpen={isAIChatOpen}
-            onToggleAIChat={() => setIsAIChatOpen(!isAIChatOpen)}
-          />
+          <MenuBar editor={editor} />
         </div>
       )}
 
-      {/* Scrollable Content Area */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Editor Content - Hide during onboarding */}
-        {!(isNewFile && !hasFirstVersion) && (
-          <div
-            ref={setScrollContainerRef}
-            className={clsx(
-              "flex-1 overflow-y-auto",
-              isAIChatOpen ? "" : "mx-auto"
-            )}
-            style={{
-              paddingTop: isHeaderVisible
-                ? `${HEADER_HEIGHT + MENUBAR_HEIGHT}px`
-                : `${MENUBAR_HEIGHT}px`,
-              maxWidth: isAIChatOpen ? "none" : "56rem", // max-w-4xl
-            }}
-          >
-            <div className="px-6 py-8 max-w-4xl mx-auto">
+      {/* Scrollable Content Area - Hide during onboarding */}
+      {!(isNewFile && !hasFirstVersion) && (
+        <div
+          ref={setScrollContainerRef}
+          className="flex-1 overflow-y-auto w-full"
+          style={{
+            paddingTop: isHeaderVisible
+              ? `${HEADER_HEIGHT + MENUBAR_HEIGHT}px`
+              : `${MENUBAR_HEIGHT}px`,
+          }}
+        >
+          <div className="w-full px-6 py-8 max-w-4xl mx-auto">
             {/* Cover Image Section */}
             <div className="mb-6">
               <div className="relative w-full bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg overflow-hidden group hover:border-gray-400 transition-colors aspect-video">
@@ -2316,59 +2237,31 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
             <div className="relative">
               <EditorContent editor={editor} />
             </div>
-            </div>
           </div>
+        </div>
         )}
 
-        {/* AI Chat Panel - Centered during onboarding, sidebar otherwise */}
-        {(isAIChatOpen || (isNewFile && !hasFirstVersion)) && (
-          <div
-            className={clsx(
-              "overflow-hidden flex items-center justify-center",
-              isNewFile && !hasFirstVersion
-                ? "flex-1 w-full bg-gray-50"
-                : "flex-shrink-0"
-            )}
-            style={{
-              paddingTop: isNewFile && !hasFirstVersion
-                ? "0px"
-                : isHeaderVisible
-                ? `${HEADER_HEIGHT + MENUBAR_HEIGHT}px`
-                : `${MENUBAR_HEIGHT}px`,
+      {/* AI Chat Panel - Only for new article onboarding */}
+      {isNewFile && !hasFirstVersion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-50 p-4">
+          <AIChatPanel
+            isOpen={true}
+            onClose={() => {}}
+            articleTitle={articleMetadata.title}
+            articleDescription={articleMetadata.description}
+            articleContent={editor?.getHTML() || ""}
+            articleMetadata={articleMetadata}
+            editor={editor}
+            isOnboarding={true}
+            onContentInserted={() => {
+              setHasFirstVersion(true);
             }}
-          >
-            <AIChatPanel
-              isOpen={true}
-              onClose={() => {
-                if (!(isNewFile && !hasFirstVersion)) {
-                  setIsAIChatOpen(false);
-                }
-              }}
-              isNewArticle={isNewFile}
-              articleTitle={articleMetadata.title}
-              articleDescription={articleMetadata.description}
-              articleContent={editor ? editor.getHTML() : undefined}
-              articleMetadata={{
-                tags: articleMetadata.tags,
-                slug: articleMetadata.slug,
-                date: articleMetadata.date,
-              }}
-              selectedText={selectedText}
-              editor={editor}
-              onContentInserted={() => {
-                if (isNewFile && !hasFirstVersion) {
-                  setHasFirstVersion(true);
-                }
-              }}
-              isOnboarding={isNewFile && !hasFirstVersion}
-              onMetadataUpdate={(metadata) => {
-                // Update article metadata from frontmatter
-                handleMetadataChange({ ...articleMetadata, ...metadata });
-              }}
-            />
-          </div>
-        )}
-      </div>
+            onMetadataUpdate={(metadata) => {
+              handleMetadataChange(metadata as ArticleMetadata);
+            }}
+          />
+        </div>
+      )}
 
       {/* Article Metadata Sidebar */}
       <ArticleMetadataPanel

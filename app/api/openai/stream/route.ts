@@ -28,43 +28,31 @@ export async function POST(request: NextRequest) {
     }
 
     // Build messages with system prompt
-    // Include article structure for full article generation only
-    // toneInstructions and articleStructure are now code-only defaults (from toneInstructions.ts)
-    const systemPrompt = buildSystemPrompt(
-      undefined, // Use default from toneInstructions.ts
-      isNewArticle === true,
-      undefined // Use default from toneInstructions.ts
-    );
+    // Uses unified Composable Writer instructions (from toneInstructions.ts)
+    const systemPrompt = buildSystemPrompt();
     const chatMessages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
       ...messages,
     ];
 
     // Build API request parameters
-    const requestParams: {
-      model: string;
-      messages: ChatMessage[];
-      temperature: number;
-      max_completion_tokens: number;
-      stream: true;
-    } = {
+    // For GPT-5.1, we use chat.completions which supports streaming
+    // Note: GPT-5.1 specific parameters (reasoning, text) are not yet supported in chat.completions streaming
+    const requestParams: any = {
       model,
       messages: chatMessages,
       temperature: Math.max(0, Math.min(2, temperature)),
-      max_completion_tokens: Math.max(1, Math.min(4000, maxTokens)), // GPT-5.1 uses max_completion_tokens instead of max_tokens
+      max_completion_tokens: Math.max(1, Math.min(4000, maxTokens)),
       stream: true,
     };
 
-    // TODO: Add GPT-5.1 specific parameters when API supports them
-    // if (reasoning?.effort) {
-    //   requestParams.reasoning = { effort: reasoning.effort };
-    // }
-    // if (text?.verbosity) {
-    //   requestParams.text = { verbosity: text.verbosity };
-    // }
+    // GPT-5.1 specific parameters (only work in Responses API, not chat.completions)
+    // We'll use chat.completions for streaming, which works well with GPT-5.1
+    // The model will still follow the system prompt instructions effectively
 
     // Create streaming response
-    const stream = await openai.chat.completions.create(requestParams);
+    // Type assertion needed because GPT-5.1 streaming works but types may not be fully updated
+    const stream = await openai.chat.completions.create(requestParams) as any;
 
     // Create a readable stream for SSE
     const encoder = new TextEncoder();

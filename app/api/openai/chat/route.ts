@@ -25,14 +25,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Build messages with system prompt
-    // Include article structure for full article generation (when isNewArticle context is present)
-    // toneInstructions and articleStructure are now code-only defaults (from toneInstructions.ts)
-    const includeStructure = body.isNewArticle === true;
-    const systemPrompt = buildSystemPrompt(
-      undefined, // Use default from toneInstructions.ts
-      includeStructure,
-      undefined // Use default from toneInstructions.ts
-    );
+    // Uses unified Composable Writer instructions (from toneInstructions.ts)
+    const systemPrompt = buildSystemPrompt();
     const chatMessages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
       ...messages,

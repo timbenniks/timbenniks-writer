@@ -16,11 +16,26 @@ export async function markdownToHtml(markdown: string): Promise<string> {
     .use(rehypeStringify, { allowDangerousHtml: true })
     .process(markdown);
 
-  return result.toString();
+  let html = result.toString();
+
+  // Post-process HTML to fix common issues
+  // Remove <p> tags inside <li> elements (invalid HTML)
+  // Use [\s\S] instead of . with s flag for compatibility
+  html = html.replace(/<li>\s*<p>([\s\S]*?)<\/p>\s*<\/li>/g, '<li>$1</li>');
+
+  // Also handle cases where there might be multiple paragraphs in a list item
+  html = html.replace(/<li>(\s*<p>[\s\S]*?<\/p>\s*)+<\/li>/g, (match) => {
+    // Extract all paragraph content and combine into single list item
+    const content = match.replace(/<\/?p>/g, '').replace(/<li>\s*/, '<li>').replace(/\s*<\/li>/, '</li>');
+    return content;
+  });
+
+  return html;
 }
 
 /**
  * Map frontmatter fields to ArticleMetadata
+ * Handles the comprehensive frontmatter structure from The Composable Writer
  */
 export function mapFrontmatterToMetadata(frontmatter: any): Partial<ArticleMetadata> {
   const metadata: Partial<ArticleMetadata> = {};
@@ -29,7 +44,7 @@ export function mapFrontmatterToMetadata(frontmatter: any): Partial<ArticleMetad
   if (frontmatter.title) metadata.title = String(frontmatter.title);
   if (frontmatter.slug) metadata.slug = String(frontmatter.slug);
   if (frontmatter.description) metadata.description = String(frontmatter.description);
-  
+
   // Date - extract date part for form input, but we'll preserve full format when saving
   if (frontmatter.date) {
     const dateValue = String(frontmatter.date);
@@ -41,46 +56,44 @@ export function mapFrontmatterToMetadata(frontmatter: any): Partial<ArticleMetad
       metadata.date = dateValue;
     }
   }
-  
+
   // Canonical URL - check multiple variations (prioritize snake_case since that's what's in the file)
-  const canonicalValue = 
-    frontmatter.canonical_url || 
-    frontmatter.canonicalUrl || 
+  const canonicalValue =
+    frontmatter.canonical_url ||
+    frontmatter.canonicalUrl ||
     frontmatter.canonical;
   if (canonicalValue) {
     metadata.canonicalUrl = String(canonicalValue);
   }
-  
+
   // Reading Time - check multiple variations (prioritize snake_case since that's what's in the file)
-  const readingTimeValue = 
-    frontmatter.reading_time || 
-    frontmatter.readingTime || 
+  const readingTimeValue =
+    frontmatter.reading_time ||
+    frontmatter.readingTime ||
     frontmatter.readTime ||
     frontmatter["reading-time"]; // Also check kebab-case
   if (readingTimeValue) {
     metadata.readingTime = String(readingTimeValue);
-    console.log("Reading time mapped:", readingTimeValue, "->", metadata.readingTime);
-  } else {
-    console.log("No reading time found in frontmatter. Available keys:", Object.keys(frontmatter));
   }
-  
+
   // Image - check multiple variations (prioritize 'image' as that's what's in source files)
-  const imageValue = 
+  const imageValue =
     frontmatter.image ||
-    frontmatter.heroImage || 
+    frontmatter.heroImage ||
     frontmatter.hero_image;
   if (imageValue) {
     metadata.heroImage = String(imageValue); // Store in heroImage for UI, but save as 'image'
   }
 
   // Handle tags (can be array or comma-separated string)
+  // Tags should be lowercase per instructions
   if (frontmatter.tags) {
     if (Array.isArray(frontmatter.tags)) {
-      metadata.tags = frontmatter.tags.map(String);
+      metadata.tags = frontmatter.tags.map((tag: any) => String(tag).toLowerCase());
     } else {
       metadata.tags = String(frontmatter.tags)
         .split(",")
-        .map((tag) => tag.trim())
+        .map((tag: string) => tag.trim().toLowerCase())
         .filter(Boolean);
     }
   }
@@ -95,10 +108,13 @@ export function mapFrontmatterToMetadata(frontmatter: any): Partial<ArticleMetad
 
   // Draft - handle boolean or string "true"
   if (frontmatter.draft !== undefined) {
-    metadata.draft = frontmatter.draft === true || 
-                     frontmatter.draft === "true" || 
-                     String(frontmatter.draft).toLowerCase() === "true";
+    metadata.draft = frontmatter.draft === true ||
+      frontmatter.draft === "true" ||
+      String(frontmatter.draft).toLowerCase() === "true";
   }
+
+  // Note: id, collection_id, and head.meta are preserved in frontmatter but not mapped to ArticleMetadata
+  // They will be preserved when saving via updateFrontmatter
 
   return metadata;
 }
@@ -118,10 +134,10 @@ export function updateFrontmatter(
   try {
     // Parse original frontmatter to get structure - preserve everything including nested objects
     const originalData = yaml.load(originalFrontmatter, { schema: yaml.DEFAULT_SCHEMA }) as Record<string, any> || {};
-    
+
     // Deep clone to preserve all original fields including nested structures (id, collection_id, head, etc.)
     const updatedData: Record<string, any> = JSON.parse(JSON.stringify(originalData));
-    
+
     // Preserve id and collection_id from original (these are not in ArticleMetadata)
     // They will be kept automatically since we're cloning originalData
 
@@ -134,15 +150,15 @@ export function updateFrontmatter(
     if (metadata.title) updatedData.title = metadata.title;
     if (metadata.slug) updatedData.slug = metadata.slug;
     if (metadata.description) updatedData.description = metadata.description;
-    
+
     // Update date - preserve original format if it had time/timezone, otherwise add T10:00:00Z
     if (metadata.date !== undefined && metadata.date !== null && metadata.date !== '') {
       const originalDate = originalData.date;
       const newDate = String(metadata.date).trim();
-      
+
       // If original had ISO datetime with time, and new date is date-only, preserve time
-      if (originalDate && typeof originalDate === 'string' && originalDate.includes('T') && 
-          newDate && !newDate.includes('T')) {
+      if (originalDate && typeof originalDate === 'string' && originalDate.includes('T') &&
+        newDate && !newDate.includes('T')) {
         const timePart = originalDate.split('T')[1] || '10:00:00Z';
         updatedData.date = `${newDate}T${timePart}`;
       } else if (newDate && !newDate.includes('T')) {
@@ -153,7 +169,7 @@ export function updateFrontmatter(
         updatedData.date = newDate;
       }
     }
-    
+
     // Preserve original key naming convention - check what exists in original file
     if (metadata.canonicalUrl !== undefined) {
       if (originalData.canonical_url !== undefined) {
@@ -168,7 +184,7 @@ export function updateFrontmatter(
         delete updatedData.canonicalUrl;
       }
     }
-    
+
     if (metadata.readingTime !== undefined) {
       if (originalData.reading_time !== undefined) {
         updatedData.reading_time = metadata.readingTime || undefined;
@@ -182,7 +198,7 @@ export function updateFrontmatter(
         delete updatedData.readingTime;
       }
     }
-    
+
     // Use 'image' key (not hero_image) as per source files
     if (metadata.heroImage !== undefined) {
       if (originalData.image !== undefined) {
@@ -205,28 +221,28 @@ export function updateFrontmatter(
         delete updatedData.heroImage;
       }
     }
-    
+
     // Preserve tags array format (flow vs block style)
     if (metadata.tags !== undefined) {
       if (metadata.tags.length > 0) {
         // Check if original used flow style (inline array)
         const originalTags = originalData.tags;
-        const wasFlowStyle = Array.isArray(originalTags) && 
-                            originalTags.length > 0 &&
-                            !originalFrontmatter.includes('tags:\n') && 
-                            originalFrontmatter.includes('tags: [');
-        
+        const wasFlowStyle = Array.isArray(originalTags) &&
+          originalTags.length > 0 &&
+          !originalFrontmatter.includes('tags:\n') &&
+          originalFrontmatter.includes('tags: [');
+
         updatedData.tags = metadata.tags;
         // Note: We'll handle the style in yaml.dump options
       } else {
         updatedData.tags = undefined;
       }
     }
-    
+
     if (metadata.faqs !== undefined) {
       updatedData.faqs = metadata.faqs.length > 0 ? metadata.faqs : undefined;
     }
-    
+
     if (metadata.draft !== undefined) {
       updatedData.draft = metadata.draft;
     }
@@ -305,10 +321,10 @@ export function updateFrontmatter(
     // Detect original formatting preferences from the original frontmatter string
     const originalTags = originalData.tags;
     // Check if tags used flow style [item1, item2] vs block style
-    const tagsUseFlowStyle = Array.isArray(originalTags) && 
-                            originalTags.length > 0 &&
-                            originalFrontmatter.match(/^tags:\s*\[/m) !== null;
-    
+    const tagsUseFlowStyle = Array.isArray(originalTags) &&
+      originalTags.length > 0 &&
+      originalFrontmatter.match(/^tags:\s*\[/m) !== null;
+
     // Check if date was quoted in original
     const dateWasQuoted = originalFrontmatter.match(/^date:\s*["']/m) !== null;
 
@@ -328,16 +344,16 @@ export function updateFrontmatter(
 
     // Convert to YAML string
     let result = yaml.dump(updatedData, yamlOptions).trim();
-    
+
     // Post-process to fix formatting issues
-    
+
     // 1. Fix date formatting - remove quotes if original didn't have them
     if (updatedData.date !== undefined && updatedData.date !== null && updatedData.date !== '') {
       if (!dateWasQuoted) {
         result = result.replace(/^date:\s*"(.+)"$/m, `date: $1`);
       }
     }
-    
+
     // 2. Fix tags format - use flow style [item1, item2] if original used it
     if (tagsUseFlowStyle && updatedData.tags && Array.isArray(updatedData.tags) && updatedData.tags.length > 0) {
       const tagsFlow = `[${updatedData.tags.join(', ')}]`;
@@ -353,7 +369,7 @@ export function updateFrontmatter(
         }
       }
     }
-    
+
     // 3. Fix head.meta indentation - ensure proper 2-space indentation
     // Format: head:\n  meta:\n    - property: ...\n      content: ...
     if (updatedData.head && updatedData.head.meta && Array.isArray(updatedData.head.meta)) {
@@ -365,7 +381,7 @@ export function updateFrontmatter(
           metaLines.push(`      content: ${meta.content}`);
         }
       });
-      
+
       if (metaLines.length > 0) {
         // Find and replace the entire head section
         // Match from "head:" to the end of the meta array
@@ -381,7 +397,7 @@ export function updateFrontmatter(
             const lines = result.split('\n');
             let headStartIdx = -1;
             let headEndIdx = lines.length;
-            
+
             for (let i = 0; i < lines.length; i++) {
               if (lines[i].match(/^head:\s*$/)) {
                 headStartIdx = i;
@@ -390,7 +406,7 @@ export function updateFrontmatter(
                 break;
               }
             }
-            
+
             if (headStartIdx >= 0) {
               const beforeHead = lines.slice(0, headStartIdx).join('\n');
               const afterHead = lines.slice(headEndIdx).join('\n');
@@ -400,7 +416,7 @@ export function updateFrontmatter(
         }
       }
     }
-    
+
     return result;
   } catch (error) {
     console.warn("Failed to update frontmatter, generating new one:", error);

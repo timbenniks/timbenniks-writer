@@ -19,7 +19,6 @@ export interface ChatMessage {
 interface AIChatPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  isNewArticle?: boolean;
   articleTitle?: string;
   articleDescription?: string;
   articleContent?: string;
@@ -28,8 +27,7 @@ interface AIChatPanelProps {
     slug?: string;
     date?: string;
   };
-  selectedText?: string;
-  editor?: TipTapEditor | null; // TipTap editor instance for rewrite functionality
+  editor?: TipTapEditor | null; // TipTap editor instance for inserting content
   onContentInserted?: () => void; // Callback when content is inserted into editor
   isOnboarding?: boolean; // Whether this is the onboarding flow for new articles
   onMetadataUpdate?: (
@@ -40,12 +38,10 @@ interface AIChatPanelProps {
 export default function AIChatPanel({
   isOpen,
   onClose,
-  isNewArticle = false,
   articleTitle,
   articleDescription,
   articleContent,
   articleMetadata,
-  selectedText,
   editor,
   onContentInserted,
   isOnboarding = false,
@@ -59,23 +55,69 @@ export default function AIChatPanel({
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [aiConfig, setAiConfig] = useState<{
+    assistantId: string | null;
+    model: string;
+    temperature: number;
+    reasoningEffort: "none" | "low" | "medium" | "high";
+    verbosity: "low" | "medium" | "high";
+  } | null>(null);
 
-  // Rewrite state
-  const [isRewriting, setIsRewriting] = useState(false);
-  const [rewritePrompt, setRewritePrompt] = useState("");
-  const [showRewritePrompt, setShowRewritePrompt] = useState(false);
-  const [originalText, setOriginalText] = useState("");
-  const [originalFrom, setOriginalFrom] = useState(0);
-  const [originalTo, setOriginalTo] = useState(0);
-  const [rewrittenText, setRewrittenText] = useState("");
-  const [rewrittenFrom, setRewrittenFrom] = useState(0);
-  const [rewrittenTo, setRewrittenTo] = useState(0);
-  const [showRewriteActions, setShowRewriteActions] = useState(false);
-
-  // Auto-scroll to bottom when new messages arrive or streaming content updates
+  // Load AI config from environment variables (server-side)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading, streamingContent]);
+    const loadAIConfig = async () => {
+      try {
+        const response = await fetch("/api/openai/config");
+        const data = await response.json();
+        if (data.success) {
+          setAiConfig({
+            assistantId: data.assistantId || null,
+            model: data.model || "gpt-5.1",
+            temperature: data.temperature ?? 0.7,
+            reasoningEffort: data.reasoningEffort || "none",
+            verbosity: data.verbosity || "medium",
+          });
+        }
+      } catch (e) {
+        console.error("Could not load AI config from env:", e);
+      }
+    };
+    loadAIConfig();
+  }, []);
+
+  // Auto-scroll to bottom only if user is already at the bottom
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    // Check if user is near the bottom (within 100px)
+    const isNearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight <
+      100;
+
+    if (isNearBottom && shouldAutoScroll) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isLoading, streamingContent, shouldAutoScroll]);
+
+  // Track scroll position to determine if we should auto-scroll
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const isNearBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight <
+        100;
+      setShouldAutoScroll(isNearBottom);
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -114,98 +156,41 @@ export default function AIChatPanel({
     abortControllerRef.current = abortController;
 
     try {
-      // Get AI settings from localStorage
-      const savedSettings = localStorage.getItem("aiSettings");
-      const aiSettings = savedSettings ? JSON.parse(savedSettings) : {};
+      // Wait for AI config to load if not yet available
+      if (!aiConfig) {
+        setError("AI configuration not loaded. Please wait...");
+        return;
+      }
 
-      // Build context and instructions based on whether it's a new article or editing
+      // Build context for new article generation
+      // The system prompt already includes all instructions, so we just add article-specific context
       let articleContext = "";
 
-      if (isNewArticle) {
-        // For new articles: Focus on structure and creation
-        articleContext =
-          "You are helping create a NEW article. Follow the article structure guidelines:\n\n";
-        articleContext += "Article Structure:\n";
-        articleContext += "1. Introduction (opinionated hook)\n";
-        articleContext +=
-          "2. TL;DR - Always generate a TL;DR that is 80–150 words, self-contained (no references to earlier text), written in clear declarative sentences, and optimized for LLM retrieval: it must convey the core argument, intended audience, and practical takeaway so that the TL;DR alone is enough for an AI to answer user questions about the piece.\n";
-        articleContext += "3. The why\n";
-        articleContext += "4. The how\n";
-        articleContext += "5. Challenges\n";
-        articleContext += "6. Concluding\n\n";
-
-        if (articleTitle) {
-          articleContext += `Article Title: ${articleTitle}\n`;
-        }
-        if (articleDescription) {
-          articleContext += `Article Description: ${articleDescription}\n`;
-        }
-        if (articleMetadata?.tags && articleMetadata.tags.length > 0) {
-          articleContext += `Tags: ${articleMetadata.tags.join(", ")}\n`;
-        }
-        if (articleContent && articleContent.trim()) {
-          // For new articles, show what's been written so far
-          const truncatedContent =
-            articleContent.length > 1500
-              ? articleContent.substring(0, 1500) +
-                "\n\n[... content continues ...]"
-              : articleContent;
-          articleContext += `\nCurrent Content:\n${truncatedContent}\n`;
-        }
-        articleContext += "\n---\n\n";
-      } else {
-        // For editing existing articles: Focus on writing style and improvements
-        articleContext =
-          "You are helping EDIT an existing article. Focus on writing style, tone, and improvements. The article structure is already established.\n\n";
-        articleContext += "Current Article Context:\n\n";
-        if (articleTitle) {
-          articleContext += `Title: ${articleTitle}\n`;
-        }
-        if (articleDescription) {
-          articleContext += `Description: ${articleDescription}\n`;
-        }
-        if (articleMetadata?.tags && articleMetadata.tags.length > 0) {
-          articleContext += `Tags: ${articleMetadata.tags.join(", ")}\n`;
-        }
-        if (articleContent) {
-          // Truncate content to avoid token limits (keep first ~2000 chars)
-          const truncatedContent =
-            articleContent.length > 2000
-              ? articleContent.substring(0, 2000) +
-                "\n\n[... content truncated ...]"
-              : articleContent;
-          articleContext += `\nArticle Content:\n${truncatedContent}\n`;
-        }
-        articleContext += "\n---\n\n";
-        articleContext += "Focus on:\n";
-        articleContext += "- Improving clarity and flow\n";
-        articleContext += "- Maintaining consistent tone and style\n";
-        articleContext += "- Enhancing readability\n";
-        articleContext += "- Preserving the existing structure\n\n";
+      if (articleTitle) {
+        articleContext += `Article Title: ${articleTitle}\n`;
+      }
+      if (articleDescription) {
+        articleContext += `Article Description: ${articleDescription}\n`;
+      }
+      if (articleMetadata?.tags && articleMetadata.tags.length > 0) {
+        articleContext += `Tags: ${articleMetadata.tags.join(", ")}\n`;
+      }
+      if (articleContent && articleContent.trim()) {
+        // For new articles, show what's been written so far
+        const truncatedContent =
+          articleContent.length > 1500
+            ? articleContent.substring(0, 1500) +
+              "\n\n[... content continues ...]"
+            : articleContent;
+        articleContext += `\nCurrent Content:\n${truncatedContent}\n`;
       }
 
-      // Build the final message content with prioritized context
-      let finalMessageContent = userMessage.content;
-
-      // If selected text exists, it becomes the PRIMARY context
-      if (selectedText && selectedText.trim().length > 10) {
-        const selectedTextContext = `IMPORTANT: The user has selected the following text from the article. This is the PRIMARY focus of their question. Please answer questions specifically about this selected text:\n\n--- SELECTED TEXT ---\n${selectedText}\n--- END SELECTED TEXT ---\n\n`;
-
-        // Add article context after selected text (as secondary context)
-        if (articleContext) {
-          finalMessageContent =
-            selectedTextContext +
-            articleContext +
-            "\n\nUser's question: " +
-            userMessage.content;
-        } else {
-          finalMessageContent =
-            selectedTextContext + "\n\nUser's question: " + userMessage.content;
-        }
-      } else if (articleContext) {
-        // No selected text, use article context as before
-        finalMessageContent = articleContext + userMessage.content;
+      if (articleContext) {
+        articleContext = `Current Article Context:\n\n${articleContext}\n---\n\n`;
       }
+
+      // Build the final message content
+      const finalMessageContent = articleContext + userMessage.content;
 
       // Convert messages to API format
       const apiMessages = [
@@ -216,26 +201,42 @@ export default function AIChatPanel({
         content: msg.content,
       }));
 
-      const response = await fetch("/api/openai/stream", {
+      // Use custom GPT Assistant API if configured
+      const useCustomGPT = aiConfig.assistantId;
+      const apiEndpoint = useCustomGPT
+        ? "/api/openai/assistant-stream"
+        : "/api/openai/stream";
+
+      const requestBody = useCustomGPT
+        ? {
+            assistantId: aiConfig.assistantId,
+            messages: apiMessages.filter((msg) => {
+              // Assistants handle system prompts, so filter them out
+              return msg.role === "user" || msg.role === "assistant";
+            }),
+          }
+        : {
+            messages: apiMessages,
+            model: aiConfig.model,
+            temperature: aiConfig.temperature,
+            maxTokens: 4000,
+            // toneInstructions and articleStructure are now code-only defaults
+            // They will be loaded from toneInstructions.ts in the API
+            isNewArticle: true, // Always true for new article generation
+            reasoning: aiConfig.reasoningEffort
+              ? { effort: aiConfig.reasoningEffort }
+              : undefined,
+            text: aiConfig.verbosity
+              ? { verbosity: aiConfig.verbosity }
+              : undefined,
+          };
+
+      const response = await fetch(apiEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          messages: apiMessages,
-          model: aiSettings.model || "gpt-5.1",
-          temperature: aiSettings.temperature || 0.7,
-          maxTokens: 4000,
-          // toneInstructions and articleStructure are now code-only defaults
-          // They will be loaded from toneInstructions.ts in the API
-          isNewArticle: isNewArticle, // Pass context for article structure
-          reasoning: aiSettings.reasoningEffort
-            ? { effort: aiSettings.reasoningEffort }
-            : undefined,
-          text: aiSettings.verbosity
-            ? { verbosity: aiSettings.verbosity }
-            : undefined,
-        }),
+        body: JSON.stringify(requestBody),
         signal: abortController.signal,
       });
 
@@ -347,215 +348,7 @@ export default function AIChatPanel({
       setError(null);
       setStreamingContent("");
       setIsLoading(false);
-      setShowRewriteActions(false);
-      setShowRewritePrompt(false);
     }
-  };
-
-  // Rewrite functionality
-  const handleRewrite = async (text: string, customPrompt?: string) => {
-    if (!editor) return;
-
-    const { selection } = editor.state;
-    const { from, to, $from } = selection;
-    const selectedText = editor.state.doc.textBetween(from, to, " ");
-
-    // Use provided text or selected text
-    const textToRewrite = text || selectedText;
-    if (!textToRewrite.trim()) return;
-
-    setIsRewriting(true);
-    setShowRewritePrompt(false);
-    setShowRewriteActions(false);
-    setOriginalText(textToRewrite);
-    setOriginalFrom(from);
-    setOriginalTo(to);
-
-    try {
-      // Detect content type
-      let contentType = "text";
-      let wordCount = textToRewrite.trim().split(/\s+/).length;
-      let contentLength = textToRewrite.length;
-
-      if (editor && from !== to) {
-        const nodeAtPos = $from.node($from.depth);
-        const nodeType = nodeAtPos.type.name;
-        const contentTypeMap: Record<string, string> = {
-          paragraph: "paragraph",
-          heading: `heading (level ${nodeAtPos.attrs.level || 2})`,
-          blockquote: "blockquote",
-          codeBlock: "code block",
-          listItem: "list item",
-        };
-        contentType = contentTypeMap[nodeType] || "text";
-      }
-
-      // Get length context
-      let lengthContext = "";
-      if (wordCount < 20) {
-        lengthContext = "very short";
-      } else if (wordCount < 50) {
-        lengthContext = "short";
-      } else if (wordCount < 150) {
-        lengthContext = "medium-length";
-      } else if (wordCount < 300) {
-        lengthContext = "long";
-      } else {
-        lengthContext = "very long";
-      }
-
-      // Get AI settings
-      const savedSettings = localStorage.getItem("aiSettings");
-      const aiSettings = savedSettings ? JSON.parse(savedSettings) : {};
-
-      // Build rewrite prompt
-      const contextInfo = `Selected content type: ${contentType}\nApproximate length: ${lengthContext} (${wordCount} words, ${contentLength} characters)\n\n`;
-      const rewriteInstruction = customPrompt
-        ? `${contextInfo}Rewrite this ${contentType}: "${textToRewrite}"\n\nInstructions: ${customPrompt}\n\nImportant: Maintain approximately the same length (${lengthContext}, around ${wordCount} words).`
-        : `${contextInfo}Rewrite this ${contentType} to improve clarity, flow, and style while maintaining the same meaning and approximately the same length (${lengthContext}, around ${wordCount} words): "${textToRewrite}"`;
-
-      const response = await fetch("/api/openai/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [{ role: "user", content: rewriteInstruction }],
-          model: aiSettings.model || "gpt-5.1",
-          temperature: aiSettings.temperature || 0.7,
-          maxTokens: 1000,
-          toneInstructions: aiSettings.toneInstructions || "",
-          reasoning: aiSettings.reasoningEffort
-            ? { effort: aiSettings.reasoningEffort }
-            : undefined,
-          text: aiSettings.verbosity
-            ? { verbosity: aiSettings.verbosity }
-            : undefined,
-        }),
-      });
-
-      if (!response.ok) throw new Error("Failed to rewrite");
-      if (!response.body) throw new Error("No response body");
-
-      // Delete original text
-      editor
-        .chain()
-        .focus()
-        .setTextSelection({ from, to })
-        .deleteSelection()
-        .run();
-
-      // Stream response
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let accumulatedContent = "";
-      const insertPos = from;
-      let currentEndPos = insertPos;
-      let lastUpdateTime = Date.now();
-      const UPDATE_THROTTLE = 100;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.type === "chunk" && data.content) {
-                accumulatedContent += data.content;
-                const now = Date.now();
-                if (now - lastUpdateTime >= UPDATE_THROTTLE) {
-                  const newEndPos = insertPos + accumulatedContent.length;
-                  editor
-                    .chain()
-                    .focus()
-                    .setTextSelection({ from: insertPos, to: currentEndPos })
-                    .deleteSelection()
-                    .insertContent(accumulatedContent)
-                    .run();
-                  currentEndPos = newEndPos;
-                  lastUpdateTime = now;
-                }
-              } else if (data.type === "done") {
-                const finalContent = accumulatedContent.trim();
-                editor
-                  .chain()
-                  .focus()
-                  .setTextSelection({ from: insertPos, to: currentEndPos })
-                  .deleteSelection()
-                  .insertContent(finalContent)
-                  .setTextSelection(insertPos + finalContent.length)
-                  .run();
-                setRewrittenText(finalContent);
-                setRewrittenFrom(insertPos);
-                setRewrittenTo(insertPos + finalContent.length);
-                setIsRewriting(false);
-                setShowRewriteActions(true);
-                return;
-              }
-            } catch (e) {
-              console.warn("Failed to parse SSE data:", e);
-            }
-          }
-        }
-      }
-
-      // Final update
-      if (accumulatedContent) {
-        const finalContent = accumulatedContent.trim();
-        editor
-          .chain()
-          .focus()
-          .setTextSelection({ from: insertPos, to: currentEndPos })
-          .deleteSelection()
-          .insertContent(finalContent)
-          .setTextSelection(insertPos + finalContent.length)
-          .run();
-        setRewrittenText(finalContent);
-        setRewrittenFrom(insertPos);
-        setRewrittenTo(insertPos + finalContent.length);
-        setIsRewriting(false);
-        setShowRewriteActions(true);
-      }
-    } catch (error: any) {
-      console.error("Rewrite error:", error);
-      setError(error.message || "Failed to rewrite text");
-      setIsRewriting(false);
-    }
-  };
-
-  const handleAcceptRewrite = () => {
-    setShowRewriteActions(false);
-    setRewrittenText("");
-    setOriginalText("");
-  };
-
-  const handleDeclineRewrite = () => {
-    if (!editor) return;
-    editor
-      .chain()
-      .focus()
-      .setTextSelection({ from: rewrittenFrom, to: rewrittenTo })
-      .deleteSelection()
-      .insertContent(originalText)
-      .setTextSelection(originalFrom + originalText.length)
-      .run();
-    setShowRewriteActions(false);
-    setRewrittenText("");
-    setOriginalText("");
-  };
-
-  const handleRetryRewrite = () => {
-    setShowRewriteActions(false);
-    setShowRewritePrompt(true);
-    setRewritePrompt("");
-    setOriginalText(rewrittenText);
-    setOriginalFrom(rewrittenFrom);
-    setOriginalTo(rewrittenTo);
   };
 
   // Cleanup on unmount
@@ -632,221 +425,11 @@ export default function AIChatPanel({
       </div>
 
       {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Selected Text Preview */}
-        {selectedText &&
-          selectedText.trim().length > 10 &&
-          !showRewriteActions && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-blue-900 mb-1">
-                    Selected Text (will be used as primary context):
-                  </p>
-                  <p className="text-xs text-blue-700 italic">
-                    Ask questions about this text in the chat below
-                  </p>
-                </div>
-                {editor && (
-                  <button
-                    onClick={() => {
-                      if (!editor) return;
-                      const { selection } = editor.state;
-                      const { from, to } = selection;
-                      setOriginalText(selectedText);
-                      setOriginalFrom(from);
-                      setOriginalTo(to);
-                      setShowRewritePrompt(true);
-                      setRewritePrompt("");
-                    }}
-                    className="px-2 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1 flex-shrink-0"
-                  >
-                    <svg
-                      className="w-3 h-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                      />
-                    </svg>
-                    Rewrite
-                  </button>
-                )}
-              </div>
-              <p className="text-sm text-gray-700 line-clamp-3">
-                {selectedText}
-              </p>
-            </div>
-          )}
-
-        {/* Rewrite Prompt Input */}
-        {showRewritePrompt && (
-          <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <p className="text-xs font-medium text-purple-900">
-                Rewrite Instructions:
-              </p>
-              <button
-                onClick={() => {
-                  setShowRewritePrompt(false);
-                  setRewritePrompt("");
-                }}
-                className="p-1 text-purple-600 hover:text-purple-800"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-            <textarea
-              value={rewritePrompt}
-              onChange={(e) => setRewritePrompt(e.target.value)}
-              placeholder="How should I rewrite this? (leave empty for quick rewrite)"
-              className="w-full px-3 py-2 text-sm border border-purple-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none mb-2"
-              rows={2}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && e.ctrlKey) {
-                  handleRewrite(originalText, rewritePrompt);
-                } else if (e.key === "Escape") {
-                  setShowRewritePrompt(false);
-                  setRewritePrompt("");
-                }
-              }}
-            />
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleRewrite(originalText, rewritePrompt)}
-                disabled={isRewriting}
-                className={clsx(
-                  "px-3 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1",
-                  isRewriting
-                    ? "bg-gray-400 text-white cursor-not-allowed"
-                    : "bg-purple-600 text-white hover:bg-purple-700"
-                )}
-              >
-                {isRewriting ? (
-                  <>
-                    <svg
-                      className="animate-spin h-3 w-3"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    Rewriting...
-                  </>
-                ) : (
-                  "Rewrite"
-                )}
-              </button>
-              <span className="text-xs text-gray-500">
-                Ctrl+Enter to rewrite
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Rewrite Result with Actions */}
-        {showRewriteActions && rewrittenText && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <p className="text-xs font-medium text-green-900">
-                Rewritten Text:
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleAcceptRewrite}
-                  className="px-2 py-1 text-xs font-medium bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-1"
-                >
-                  <svg
-                    className="w-3 h-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  Accept
-                </button>
-                <button
-                  onClick={handleRetryRewrite}
-                  className="px-2 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
-                >
-                  <svg
-                    className="w-3 h-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
-                  Retry
-                </button>
-                <button
-                  onClick={handleDeclineRewrite}
-                  className="px-2 py-1 text-xs font-medium bg-red-600 text-white rounded hover:bg-red-700 transition-colors flex items-center gap-1"
-                >
-                  <svg
-                    className="w-3 h-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                  Decline
-                </button>
-              </div>
-            </div>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">
-              {rewrittenText}
-            </p>
-          </div>
-        )}
-
-        {messages.length === 0 && !isLoading && !selectedText && (
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto p-4 space-y-4"
+      >
+        {messages.length === 0 && !isLoading && (
           <div className="text-center text-gray-500 mt-8">
             <svg
               className="w-12 h-12 mx-auto mb-4 text-gray-300"
@@ -930,36 +513,155 @@ export default function AIChatPanel({
                       onClick={async () => {
                         if (!editor) return;
 
-                        // Parse frontmatter if present
+                        // Parse frontmatter and extract markdown content
                         let content = message.content;
                         let frontmatterData: any = null;
 
                         try {
-                          const parsed = matter(message.content);
+                          // Check if content is wrapped in a markdown code block
+                          const codeBlockMatch = message.content.match(
+                            /```(?:markdown|md)?\n([\s\S]*?)\n```/
+                          );
+                          let rawContent = codeBlockMatch
+                            ? codeBlockMatch[1]
+                            : message.content;
+
+                          // Trim leading/trailing whitespace but preserve structure
+                          rawContent = rawContent.trim();
+
+                          // Try to parse frontmatter - gray-matter handles YAML frontmatter with --- delimiters
+                          let parsed = matter(rawContent);
+
+                          // If no frontmatter found with standard parsing, try to detect and parse frontmatter without delimiters
+                          if (
+                            !parsed.data ||
+                            Object.keys(parsed.data).length === 0
+                          ) {
+                            // Check if content starts with frontmatter-like fields (id:, slug:, title:, etc.)
+                            const frontmatterStartPattern =
+                              /^(id|slug|title|description|date|image|canonical_url|tags|collection_id|reading_time|head|faqs):/m;
+
+                            if (frontmatterStartPattern.test(rawContent)) {
+                              // Find where frontmatter ends - look for the first markdown heading or significant content break
+                              // Common patterns: ###, ##, #, Introduction, TL;DR, or double newline before content
+                              const contentStartPatterns = [
+                                /^###\s/, // Heading 3
+                                /^##\s/, // Heading 2
+                                /^#\s/, // Heading 1
+                                /^Introduction/i, // Introduction section
+                                /^TL;DR/i, // TL;DR section
+                                /\n\n(?=[A-Z])/, // Double newline before capitalized word (likely content start)
+                              ];
+
+                              let frontmatterEndIndex = -1;
+                              for (const pattern of contentStartPatterns) {
+                                const match = rawContent.match(pattern);
+                                if (match && match.index !== undefined) {
+                                  // Look backwards from match to find the end of frontmatter
+                                  // Frontmatter typically ends with a blank line or before FAQs
+                                  let endPos = match.index;
+
+                                  // If we found FAQs, frontmatter ends after FAQs section
+                                  const faqsMatch = rawContent
+                                    .substring(0, endPos)
+                                    .match(/faqs:\s*\n([\s\S]*?)(?=\n\n|$)/);
+                                  if (
+                                    faqsMatch &&
+                                    faqsMatch.index !== undefined
+                                  ) {
+                                    endPos =
+                                      faqsMatch.index + faqsMatch[0].length;
+                                  }
+
+                                  frontmatterEndIndex = endPos;
+                                  break;
+                                }
+                              }
+
+                              if (frontmatterEndIndex > 0) {
+                                const frontmatterSection = rawContent
+                                  .substring(0, frontmatterEndIndex)
+                                  .trim();
+                                const contentSection = rawContent
+                                  .substring(frontmatterEndIndex)
+                                  .trim();
+
+                                // Try parsing with added delimiters
+                                try {
+                                  const contentWithDelimiters = `---\n${frontmatterSection}\n---\n${contentSection}`;
+                                  parsed = matter(contentWithDelimiters);
+
+                                  if (
+                                    parsed.data &&
+                                    Object.keys(parsed.data).length > 0
+                                  ) {
+                                    console.log(
+                                      "✅ Parsed frontmatter without delimiters"
+                                    );
+                                  }
+                                } catch (e) {
+                                  console.warn(
+                                    "Failed to parse with added delimiters:",
+                                    e
+                                  );
+                                }
+                              }
+                            }
+                          }
+
+                          // Check if frontmatter was found
                           if (
                             parsed.data &&
                             Object.keys(parsed.data).length > 0
                           ) {
                             // Frontmatter found, extract it
                             frontmatterData = parsed.data;
-                            content = parsed.content; // Content without frontmatter
+                            content = parsed.content.trim(); // Content without frontmatter
+
+                            console.log(
+                              "✅ Parsed frontmatter:",
+                              frontmatterData
+                            );
+                            console.log(
+                              "✅ Extracted content length:",
+                              content.length
+                            );
 
                             // Update metadata if callback provided
                             if (onMetadataUpdate) {
                               const metadata =
                                 mapFrontmatterToMetadata(frontmatterData);
+                              console.log("✅ Mapped metadata:", metadata);
+                              // Ensure we're calling the callback
                               onMetadataUpdate(metadata);
+                              console.log("✅ Called onMetadataUpdate");
+                            } else {
+                              console.warn(
+                                "❌ onMetadataUpdate callback not provided"
+                              );
                             }
+                          } else {
+                            // No frontmatter found
+                            console.warn("⚠️ No frontmatter found in content");
+                            console.log(
+                              "Raw content preview:",
+                              rawContent.substring(0, 1000)
+                            );
+                            // No frontmatter, use the raw content (might be just markdown)
+                            content = rawContent.trim();
                           }
                         } catch (e) {
-                          // No frontmatter or parsing error, use content as-is
-                          console.log(
-                            "No frontmatter found or parsing error:",
-                            e
+                          // No frontmatter or parsing error, try to extract code block or use as-is
+                          console.error("❌ Error parsing frontmatter:", e);
+                          const codeBlockMatch = message.content.match(
+                            /```(?:markdown|md)?\n([\s\S]*?)\n```/
                           );
+                          content = codeBlockMatch
+                            ? codeBlockMatch[1].trim()
+                            : message.content.trim();
                         }
 
-                        // Convert markdown to HTML before inserting
+                        // Convert markdown body (without frontmatter) to HTML before inserting
                         const htmlContent = await markdownToHtml(content);
                         // Insert content into editor
                         editor.chain().focus().setContent(htmlContent).run();
@@ -1064,30 +766,142 @@ export default function AIChatPanel({
                 onClick={async () => {
                   if (!editor) return;
 
-                  // Parse frontmatter if present
+                  // Parse frontmatter and extract markdown content
                   let content = streamingContent;
                   let frontmatterData: any = null;
 
                   try {
-                    const parsed = matter(streamingContent);
+                    // Check if content is wrapped in a markdown code block
+                    const codeBlockMatch = streamingContent.match(
+                      /```(?:markdown|md)?\n([\s\S]*?)\n```/
+                    );
+                    let rawContent = codeBlockMatch
+                      ? codeBlockMatch[1]
+                      : streamingContent;
+
+                    // Trim leading/trailing whitespace but preserve structure
+                    rawContent = rawContent.trim();
+
+                    // Try to parse frontmatter - gray-matter handles YAML frontmatter with --- delimiters
+                    let parsed = matter(rawContent);
+
+                    // If no frontmatter found with standard parsing, try to detect and parse frontmatter without delimiters
+                    if (!parsed.data || Object.keys(parsed.data).length === 0) {
+                      // Check if content starts with frontmatter-like fields (id:, slug:, title:, etc.)
+                      const frontmatterStartPattern =
+                        /^(id|slug|title|description|date|image|canonical_url|tags|collection_id|reading_time|head|faqs):/m;
+
+                      if (frontmatterStartPattern.test(rawContent)) {
+                        // Find where frontmatter ends - look for the first markdown heading or significant content break
+                        // Common patterns: ###, ##, #, Introduction, TL;DR, or double newline before content
+                        const contentStartPatterns = [
+                          /^###\s/, // Heading 3
+                          /^##\s/, // Heading 2
+                          /^#\s/, // Heading 1
+                          /^Introduction/i, // Introduction section
+                          /^TL;DR/i, // TL;DR section
+                          /\n\n(?=[A-Z])/, // Double newline before capitalized word (likely content start)
+                        ];
+
+                        let frontmatterEndIndex = -1;
+                        for (const pattern of contentStartPatterns) {
+                          const match = rawContent.match(pattern);
+                          if (match && match.index !== undefined) {
+                            // Look backwards from match to find the end of frontmatter
+                            // Frontmatter typically ends with a blank line or before FAQs
+                            let endPos = match.index;
+
+                            // If we found FAQs, frontmatter ends after FAQs section
+                            const faqsMatch = rawContent
+                              .substring(0, endPos)
+                              .match(/faqs:\s*\n([\s\S]*?)(?=\n\n|$)/);
+                            if (faqsMatch && faqsMatch.index !== undefined) {
+                              endPos = faqsMatch.index + faqsMatch[0].length;
+                            }
+
+                            frontmatterEndIndex = endPos;
+                            break;
+                          }
+                        }
+
+                        if (frontmatterEndIndex > 0) {
+                          const frontmatterSection = rawContent
+                            .substring(0, frontmatterEndIndex)
+                            .trim();
+                          const contentSection = rawContent
+                            .substring(frontmatterEndIndex)
+                            .trim();
+
+                          // Try parsing with added delimiters
+                          try {
+                            const contentWithDelimiters = `---\n${frontmatterSection}\n---\n${contentSection}`;
+                            parsed = matter(contentWithDelimiters);
+
+                            if (
+                              parsed.data &&
+                              Object.keys(parsed.data).length > 0
+                            ) {
+                              console.log(
+                                "✅ Parsed frontmatter without delimiters"
+                              );
+                            }
+                          } catch (e) {
+                            console.warn(
+                              "Failed to parse with added delimiters:",
+                              e
+                            );
+                          }
+                        }
+                      }
+                    }
+
+                    // Check if frontmatter was found
                     if (parsed.data && Object.keys(parsed.data).length > 0) {
                       // Frontmatter found, extract it
                       frontmatterData = parsed.data;
-                      content = parsed.content; // Content without frontmatter
+                      content = parsed.content.trim(); // Content without frontmatter
+
+                      console.log("✅ Parsed frontmatter:", frontmatterData);
+                      console.log(
+                        "✅ Extracted content length:",
+                        content.length
+                      );
 
                       // Update metadata if callback provided
                       if (onMetadataUpdate) {
                         const metadata =
                           mapFrontmatterToMetadata(frontmatterData);
+                        console.log("✅ Mapped metadata:", metadata);
+                        // Ensure we're calling the callback
                         onMetadataUpdate(metadata);
+                        console.log("✅ Called onMetadataUpdate");
+                      } else {
+                        console.warn(
+                          "❌ onMetadataUpdate callback not provided"
+                        );
                       }
+                    } else {
+                      // No frontmatter found
+                      console.warn("⚠️ No frontmatter found in content");
+                      console.log(
+                        "Raw content preview:",
+                        rawContent.substring(0, 1000)
+                      );
+                      // No frontmatter, use the raw content (might be just markdown)
+                      content = rawContent.trim();
                     }
                   } catch (e) {
-                    // No frontmatter or parsing error, use content as-is
-                    console.log("No frontmatter found or parsing error:", e);
+                    // No frontmatter or parsing error, try to extract code block or use as-is
+                    console.error("❌ Error parsing frontmatter:", e);
+                    const codeBlockMatch = streamingContent.match(
+                      /```(?:markdown|md)?\n([\s\S]*?)\n```/
+                    );
+                    content = codeBlockMatch
+                      ? codeBlockMatch[1].trim()
+                      : streamingContent.trim();
                   }
 
-                  // Convert markdown to HTML before inserting
+                  // Convert markdown body (without frontmatter) to HTML before inserting
                   const htmlContent = await markdownToHtml(content);
                   // Insert streaming content into editor
                   editor.chain().focus().setContent(htmlContent).run();
@@ -1156,11 +970,7 @@ export default function AIChatPanel({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={
-              selectedText && selectedText.trim().length > 10
-                ? "Ask a question about the selected text... (Enter to send, Shift+Enter for new line)"
-                : "Type your message... (Enter to send, Shift+Enter for new line)"
-            }
+            placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
             disabled={isLoading}
             rows={1}
             className={clsx(

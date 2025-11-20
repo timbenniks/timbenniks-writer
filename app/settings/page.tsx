@@ -40,13 +40,14 @@ function SettingsPageContent() {
     message: string;
   }>({ type: null, message: "" });
 
-  // AI settings state
-  const [aiSettings, setAiSettings] = useState({
-    model: "gpt-5.1",
-    temperature: 0.7,
-    reasoningEffort: "none" as "none" | "low" | "medium" | "high",
-    verbosity: "medium" as "low" | "medium" | "high",
-  });
+  // AI config from env vars
+  const [aiConfig, setAiConfig] = useState<{
+    assistantId: string | null;
+    model: string;
+    temperature: number;
+    reasoningEffort: "none" | "low" | "medium" | "high";
+    verbosity: "low" | "medium" | "high";
+  } | null>(null);
   const [isTestingAI, setIsTestingAI] = useState(false);
   const [aiTestStatus, setAiTestStatus] = useState<{
     type: "success" | "error" | null;
@@ -65,23 +66,25 @@ function SettingsPageContent() {
       }
     }
 
-    // Load AI settings
-    const savedAISettings = localStorage.getItem("aiSettings");
-    if (savedAISettings) {
+    // Load AI config from environment variables
+    const loadAIConfig = async () => {
       try {
-        const parsed = JSON.parse(savedAISettings);
-        // Only load model, temperature, reasoningEffort, verbosity
-        // toneInstructions and articleStructure are now code-only defaults
-        setAiSettings({
-          model: parsed.model || "gpt-5.1",
-          temperature: parsed.temperature ?? 0.7,
-          reasoningEffort: parsed.reasoningEffort || "none",
-          verbosity: parsed.verbosity || "medium",
-        });
+        const response = await fetch("/api/openai/config");
+        const data = await response.json();
+        if (data.success) {
+          setAiConfig({
+            assistantId: data.assistantId || null,
+            model: data.model || "gpt-5.1",
+            temperature: data.temperature ?? 0.7,
+            reasoningEffort: data.reasoningEffort || "none",
+            verbosity: data.verbosity || "medium",
+          });
+        }
       } catch (e) {
-        console.error("Failed to parse saved AI settings:", e);
+        console.error("Failed to load AI config:", e);
       }
-    }
+    };
+    loadAIConfig();
   }, []);
 
   // Check Google connection status
@@ -310,14 +313,16 @@ function SettingsPageContent() {
     }
   };
 
-  // AI settings handlers
-  const updateAISetting = (key: string, value: any) => {
-    const updated = { ...aiSettings, [key]: value };
-    setAiSettings(updated);
-    localStorage.setItem("aiSettings", JSON.stringify(updated));
-  };
-
+  // AI connection test handler
   const testAIConnection = async () => {
+    if (!aiConfig) {
+      setAiTestStatus({
+        type: "error",
+        message: "AI configuration not loaded",
+      });
+      return;
+    }
+
     setIsTestingAI(true);
     setAiTestStatus({ type: null, message: "" });
 
@@ -335,11 +340,11 @@ function SettingsPageContent() {
                 "Hello! Please respond with a brief confirmation that you're working.",
             },
           ],
-          model: aiSettings.model,
-          temperature: aiSettings.temperature,
+          model: aiConfig.model,
+          temperature: aiConfig.temperature,
           maxTokens: 100,
-          reasoning: { effort: aiSettings.reasoningEffort },
-          text: { verbosity: aiSettings.verbosity },
+          reasoning: { effort: aiConfig.reasoningEffort },
+          text: { verbosity: aiConfig.verbosity },
         }),
       });
 
@@ -715,143 +720,12 @@ function SettingsPageContent() {
               AI Writing Assistant
             </h2>
             <p className="text-gray-600">
-              Configure OpenAI settings for AI-powered writing assistance.
-              Tone of voice and article structure instructions are managed in code.
+              All AI settings are configured via environment variables. Tone of
+              voice and article structure instructions are managed in code.
             </p>
           </div>
 
           <div className="space-y-6">
-            {/* Model Selection */}
-            <div>
-              <label
-                htmlFor="ai-model"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Model
-              </label>
-              <select
-                id="ai-model"
-                value={aiSettings.model}
-                onChange={(e) => updateAISetting("model", e.target.value)}
-                className={INPUT_CLASSES}
-              >
-                <option value="gpt-5.1">GPT-5.1</option>
-                <option value="gpt-4o">GPT-4o</option>
-                <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-              </select>
-              <p className="mt-1 text-xs text-gray-500">
-                Select the OpenAI model to use for AI assistance
-              </p>
-            </div>
-
-            {/* Temperature */}
-            <div>
-              <label
-                htmlFor="ai-temperature"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Temperature: {aiSettings.temperature}
-              </label>
-              <input
-                id="ai-temperature"
-                type="range"
-                min="0"
-                max="2"
-                step="0.1"
-                value={aiSettings.temperature}
-                onChange={(e) =>
-                  updateAISetting("temperature", parseFloat(e.target.value))
-                }
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-gray-500 mt-1">
-                <span>Focused (0.0)</span>
-                <span>Balanced (1.0)</span>
-                <span>Creative (2.0)</span>
-              </div>
-              <p className="mt-1 text-xs text-gray-500">
-                Controls randomness. Lower = more focused, Higher = more
-                creative
-              </p>
-            </div>
-
-            {/* Reasoning Effort */}
-            <div>
-              <label
-                htmlFor="ai-reasoning-effort"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Reasoning Effort
-              </label>
-              <select
-                id="ai-reasoning-effort"
-                value={aiSettings.reasoningEffort}
-                onChange={(e) =>
-                  updateAISetting("reasoningEffort", e.target.value)
-                }
-                className={INPUT_CLASSES}
-              >
-                <option value="none">
-                  None - Lowest latency, fastest responses (default)
-                </option>
-                <option value="low">
-                  Low - Quick responses, fewer reasoning tokens
-                </option>
-                <option value="medium">Medium - Balanced reasoning</option>
-                <option value="high">
-                  High - Thorough reasoning, more tokens
-                </option>
-              </select>
-              <p className="mt-1 text-xs text-gray-500">
-                Controls how many reasoning tokens are generated before the
-                response. Lower = faster, higher = more thorough.
-                <br />
-                <span className="text-gray-400 italic">
-                  Tip: With "none", encourage the model to "think" or outline
-                  steps in your prompts for better quality.
-                </span>
-              </p>
-            </div>
-
-            {/* Verbosity */}
-            <div>
-              <label
-                htmlFor="ai-verbosity"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Verbosity
-              </label>
-              <select
-                id="ai-verbosity"
-                value={aiSettings.verbosity}
-                onChange={(e) => updateAISetting("verbosity", e.target.value)}
-                className={INPUT_CLASSES}
-              >
-                <option value="low">
-                  Low - Concise answers, shorter code (SQL queries, simple
-                  generation)
-                </option>
-                <option value="medium">
-                  Medium - Balanced detail (default)
-                </option>
-                <option value="high">
-                  High - Thorough explanations, longer structured code with
-                  inline comments
-                </option>
-              </select>
-              <p className="mt-1 text-xs text-gray-500">
-                Controls how many output tokens are generated. Lower = faster,
-                more concise. Higher = more detailed, thorough.
-                <br />
-                <span className="text-gray-400 italic">
-                  Use high for document explanations or extensive code
-                  refactoring. Use low for concise answers or simple code.
-                </span>
-              </p>
-            </div>
-
-
             {/* Test Connection */}
             <div className="flex items-center gap-3">
               <button
