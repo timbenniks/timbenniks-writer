@@ -523,104 +523,8 @@ export default function AIChatPanel({
                           // Trim leading/trailing whitespace but preserve structure
                           rawContent = rawContent.trim();
 
-                          // Try to parse frontmatter - gray-matter handles YAML frontmatter with --- delimiters
-                          let parsed = matter(rawContent);
-
-                          // If no frontmatter found with standard parsing, try to detect and parse frontmatter without delimiters
-                          if (
-                            !parsed.data ||
-                            Object.keys(parsed.data).length === 0
-                          ) {
-                            // Check if content starts with frontmatter-like fields (id:, slug:, title:, etc.)
-                            const frontmatterStartPattern =
-                              /^(id|slug|title|description|date|image|canonical_url|tags|collection_id|reading_time|head|faqs):/m;
-
-                            if (frontmatterStartPattern.test(rawContent)) {
-                              // Find where frontmatter ends
-                              // First, check if FAQs section exists and ends the frontmatter
-                              const faqsMatch = rawContent.match(/faqs:\s*\n([\s\S]*?)(?=\n\n\n|\n\n[A-Z#]|$)/);
-                              let frontmatterEndIndex = -1;
-
-                              if (faqsMatch && faqsMatch.index !== undefined) {
-                                // Frontmatter ends after FAQs section
-                                frontmatterEndIndex = faqsMatch.index + faqsMatch[0].length;
-                                
-                                // Skip any trailing blank lines after FAQs
-                                const afterFaqs = rawContent.substring(frontmatterEndIndex);
-                                const blankLinesMatch = afterFaqs.match(/^(\n+)/);
-                                if (blankLinesMatch) {
-                                  frontmatterEndIndex += blankLinesMatch[0].length;
-                                }
-                              } else {
-                                // No FAQs, look for content start patterns
-                                const contentStartPatterns = [
-                                  /^###\s/m, // Heading 3
-                                  /^##\s/m, // Heading 2
-                                  /^#\s/m, // Heading 1
-                                  /^Introduction/mi, // Introduction section
-                                  /^TL;DR/mi, // TL;DR section
-                                  /\n\n\n+(?=[A-Z#])/m, // Triple+ newline before content
-                                  /\n\n(?=[A-Z][a-z]+ [a-z])/m, // Double newline before sentence (capitalized word followed by lowercase)
-                                ];
-
-                                for (const pattern of contentStartPatterns) {
-                                  const match = rawContent.match(pattern);
-                                  if (match && match.index !== undefined && match.index > 100) {
-                                    // Make sure we're not too early (frontmatter should be at least 100 chars)
-                                    frontmatterEndIndex = match.index;
-                                    break;
-                                  }
-                                }
-                              }
-
-                              if (frontmatterEndIndex > 0) {
-                                const frontmatterSection = rawContent
-                                  .substring(0, frontmatterEndIndex)
-                                  .trim();
-                                const contentSection = rawContent
-                                  .substring(frontmatterEndIndex)
-                                  .trim();
-
-                                // Try parsing with added delimiters
-                                try {
-                                  const contentWithDelimiters = `---\n${frontmatterSection}\n---\n${contentSection}`;
-                                  parsed = matter(contentWithDelimiters);
-
-                                  if (
-                                    parsed.data &&
-                                    Object.keys(parsed.data).length > 0
-                                  ) {
-                                    console.log(
-                                      "✅ Parsed frontmatter without delimiters"
-                                    );
-                                  }
-                                } catch (e) {
-                                  console.warn(
-                                    "Failed to parse with added delimiters:",
-                                    e
-                                  );
-                                }
-                              } else {
-                                // Fallback: if we can't find the end, try to parse everything up to first heading or paragraph
-                                const fallbackMatch = rawContent.match(/\n\n\n+|\n\n(?=[A-Z][a-z]+ [a-z])/m);
-                                if (fallbackMatch && fallbackMatch.index !== undefined && fallbackMatch.index > 100) {
-                                  const frontmatterSection = rawContent
-                                    .substring(0, fallbackMatch.index)
-                                    .trim();
-                                  const contentSection = rawContent
-                                    .substring(fallbackMatch.index)
-                                    .trim();
-
-                                  try {
-                                    const contentWithDelimiters = `---\n${frontmatterSection}\n---\n${contentSection}`;
-                                    parsed = matter(contentWithDelimiters);
-                                  } catch (e) {
-                                    console.warn("Fallback parsing failed:", e);
-                                  }
-                                }
-                              }
-                            }
-                          }
+                          // Parse frontmatter - gray-matter handles YAML frontmatter with --- delimiters
+                          const parsed = matter(rawContent);
 
                           // Check if frontmatter was found
                           if (
@@ -645,7 +549,6 @@ export default function AIChatPanel({
                               const metadata =
                                 mapFrontmatterToMetadata(frontmatterData);
                               console.log("✅ Mapped metadata:", metadata);
-                              // Ensure we're calling the callback
                               onMetadataUpdate(metadata);
                               console.log("✅ Called onMetadataUpdate");
                             } else {
@@ -655,16 +558,14 @@ export default function AIChatPanel({
                             }
                           } else {
                             // No frontmatter found
-                            console.warn("⚠️ No frontmatter found in content");
-                            console.log(
-                              "Raw content preview:",
-                              rawContent.substring(0, 1000)
+                            console.warn(
+                              "⚠️ No frontmatter found in content (expected --- delimiters)"
                             );
                             // No frontmatter, use the raw content (might be just markdown)
                             content = rawContent.trim();
                           }
                         } catch (e) {
-                          // No frontmatter or parsing error, try to extract code block or use as-is
+                          // Parsing error, try to extract code block or use as-is
                           console.error("❌ Error parsing frontmatter:", e);
                           const codeBlockMatch = message.content.match(
                             /```(?:markdown|md)?\n([\s\S]*?)\n```/
@@ -795,101 +696,8 @@ export default function AIChatPanel({
                     // Trim leading/trailing whitespace but preserve structure
                     rawContent = rawContent.trim();
 
-                    // Try to parse frontmatter - gray-matter handles YAML frontmatter with --- delimiters
-                    let parsed = matter(rawContent);
-
-                    // If no frontmatter found with standard parsing, try to detect and parse frontmatter without delimiters
-                    if (!parsed.data || Object.keys(parsed.data).length === 0) {
-                      // Check if content starts with frontmatter-like fields (id:, slug:, title:, etc.)
-                      const frontmatterStartPattern =
-                        /^(id|slug|title|description|date|image|canonical_url|tags|collection_id|reading_time|head|faqs):/m;
-
-                      if (frontmatterStartPattern.test(rawContent)) {
-                        // Find where frontmatter ends
-                        // First, check if FAQs section exists and ends the frontmatter
-                        const faqsMatch = rawContent.match(/faqs:\s*\n([\s\S]*?)(?=\n\n\n|\n\n[A-Z#]|$)/);
-                        let frontmatterEndIndex = -1;
-
-                        if (faqsMatch && faqsMatch.index !== undefined) {
-                          // Frontmatter ends after FAQs section
-                          frontmatterEndIndex = faqsMatch.index + faqsMatch[0].length;
-                          
-                          // Skip any trailing blank lines after FAQs
-                          const afterFaqs = rawContent.substring(frontmatterEndIndex);
-                          const blankLinesMatch = afterFaqs.match(/^(\n+)/);
-                          if (blankLinesMatch) {
-                            frontmatterEndIndex += blankLinesMatch[0].length;
-                          }
-                        } else {
-                          // No FAQs, look for content start patterns
-                          const contentStartPatterns = [
-                            /^###\s/m, // Heading 3
-                            /^##\s/m, // Heading 2
-                            /^#\s/m, // Heading 1
-                            /^Introduction/mi, // Introduction section
-                            /^TL;DR/mi, // TL;DR section
-                            /\n\n\n+(?=[A-Z#])/m, // Triple+ newline before content
-                            /\n\n(?=[A-Z][a-z]+ [a-z])/m, // Double newline before sentence (capitalized word followed by lowercase)
-                          ];
-
-                          for (const pattern of contentStartPatterns) {
-                            const match = rawContent.match(pattern);
-                            if (match && match.index !== undefined && match.index > 100) {
-                              // Make sure we're not too early (frontmatter should be at least 100 chars)
-                              frontmatterEndIndex = match.index;
-                              break;
-                            }
-                          }
-                        }
-
-                        if (frontmatterEndIndex > 0) {
-                          const frontmatterSection = rawContent
-                            .substring(0, frontmatterEndIndex)
-                            .trim();
-                          const contentSection = rawContent
-                            .substring(frontmatterEndIndex)
-                            .trim();
-
-                          // Try parsing with added delimiters
-                          try {
-                            const contentWithDelimiters = `---\n${frontmatterSection}\n---\n${contentSection}`;
-                            parsed = matter(contentWithDelimiters);
-
-                            if (
-                              parsed.data &&
-                              Object.keys(parsed.data).length > 0
-                            ) {
-                              console.log(
-                                "✅ Parsed frontmatter without delimiters"
-                              );
-                            }
-                          } catch (e) {
-                            console.warn(
-                              "Failed to parse with added delimiters:",
-                              e
-                            );
-                          }
-                        } else {
-                          // Fallback: if we can't find the end, try to parse everything up to first heading or paragraph
-                          const fallbackMatch = rawContent.match(/\n\n\n+|\n\n(?=[A-Z][a-z]+ [a-z])/m);
-                          if (fallbackMatch && fallbackMatch.index !== undefined && fallbackMatch.index > 100) {
-                            const frontmatterSection = rawContent
-                              .substring(0, fallbackMatch.index)
-                              .trim();
-                            const contentSection = rawContent
-                              .substring(fallbackMatch.index)
-                              .trim();
-
-                            try {
-                              const contentWithDelimiters = `---\n${frontmatterSection}\n---\n${contentSection}`;
-                              parsed = matter(contentWithDelimiters);
-                            } catch (e) {
-                              console.warn("Fallback parsing failed:", e);
-                            }
-                          }
-                        }
-                      }
-                    }
+                    // Parse frontmatter - gray-matter handles YAML frontmatter with --- delimiters
+                    const parsed = matter(rawContent);
 
                     // Check if frontmatter was found
                     if (parsed.data && Object.keys(parsed.data).length > 0) {
@@ -908,7 +716,6 @@ export default function AIChatPanel({
                         const metadata =
                           mapFrontmatterToMetadata(frontmatterData);
                         console.log("✅ Mapped metadata:", metadata);
-                        // Ensure we're calling the callback
                         onMetadataUpdate(metadata);
                         console.log("✅ Called onMetadataUpdate");
                       } else {
@@ -918,16 +725,14 @@ export default function AIChatPanel({
                       }
                     } else {
                       // No frontmatter found
-                      console.warn("⚠️ No frontmatter found in content");
-                      console.log(
-                        "Raw content preview:",
-                        rawContent.substring(0, 1000)
+                      console.warn(
+                        "⚠️ No frontmatter found in content (expected --- delimiters)"
                       );
                       // No frontmatter, use the raw content (might be just markdown)
                       content = rawContent.trim();
                     }
                   } catch (e) {
-                    // No frontmatter or parsing error, try to extract code block or use as-is
+                    // Parsing error, try to extract code block or use as-is
                     console.error("❌ Error parsing frontmatter:", e);
                     const codeBlockMatch = streamingContent.match(
                       /```(?:markdown|md)?\n([\s\S]*?)\n```/
