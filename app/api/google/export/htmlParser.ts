@@ -1,57 +1,58 @@
-import { JSDOM } from "jsdom";
+import * as cheerio from "cheerio";
 import type { TextRun, Paragraph } from "./types";
 
 /**
- * Extract text runs with formatting from a DOM node
+ * Extract text runs with formatting from a cheerio element
  */
-function extractTextRuns(node: Node, textRuns: TextRun[] = []): TextRun[] {
-  if (node.nodeType === 3) {
-    // Text node
-    const text = node.textContent || "";
-    if (text.trim()) {
-      textRuns.push({ text });
-    }
-  } else if (node.nodeType === 1) {
-    // Element node
-    const element = node as Element;
-    const tagName = element.tagName.toLowerCase();
-    const children = Array.from(element.childNodes);
+function extractTextRuns($: ReturnType<typeof cheerio.load>, element: any, textRuns: TextRun[] = []): TextRun[] {
+  const children = element.contents();
 
-    // Handle inline formatting
-    if (tagName === "strong" || tagName === "b") {
-      const text = element.textContent || "";
+  children.each((_: number, node: any) => {
+    if (node.type === "text") {
+      // Text node
+      const text = node.data || "";
       if (text.trim()) {
-        textRuns.push({ text, bold: true });
+        textRuns.push({ text });
       }
-    } else if (tagName === "em" || tagName === "i") {
-      const text = element.textContent || "";
-      if (text.trim()) {
-        textRuns.push({ text, italic: true });
-      }
-    } else if (tagName === "a") {
-      const href = element.getAttribute("href") || "";
-      const text = element.textContent || "";
-      if (text.trim()) {
-        textRuns.push({ text, link: href });
-      }
-    } else if (tagName === "code" && element.parentElement?.tagName.toLowerCase() !== "pre") {
-      // Inline code
-      const text = element.textContent || "";
-      if (text.trim()) {
-        textRuns.push({
-          text,
-          foregroundColor: {
-            color: { rgbColor: { red: 0.8, green: 0.2, blue: 0.2 } },
-          },
-        });
-      }
-    } else {
-      // Recursively process children
-      for (const child of children) {
-        extractTextRuns(child, textRuns);
+    } else if (node.type === "tag") {
+      // Element node
+      const $el = $(node);
+      const tagName = $el.prop("tagName")?.toLowerCase() || "";
+
+      // Handle inline formatting
+      if (tagName === "strong" || tagName === "b") {
+        const text = $el.text() || "";
+        if (text.trim()) {
+          textRuns.push({ text, bold: true });
+        }
+      } else if (tagName === "em" || tagName === "i") {
+        const text = $el.text() || "";
+        if (text.trim()) {
+          textRuns.push({ text, italic: true });
+        }
+      } else if (tagName === "a") {
+        const href = $el.attr("href") || "";
+        const text = $el.text() || "";
+        if (text.trim()) {
+          textRuns.push({ text, link: href });
+        }
+      } else if (tagName === "code" && $el.parent().prop("tagName")?.toLowerCase() !== "pre") {
+        // Inline code
+        const text = $el.text() || "";
+        if (text.trim()) {
+          textRuns.push({
+            text,
+            foregroundColor: {
+              color: { rgbColor: { red: 0.8, green: 0.2, blue: 0.2 } },
+            },
+          });
+        }
+      } else {
+        // Recursively process children
+        extractTextRuns($, $el, textRuns);
       }
     }
-  }
+  });
 
   return textRuns;
 }
@@ -60,23 +61,20 @@ function extractTextRuns(node: Node, textRuns: TextRun[] = []): TextRun[] {
  * Parse HTML content and convert to structured Paragraph format
  */
 export function parseHTMLToParagraphs(html: string): Paragraph[] {
-  const dom = new JSDOM(html);
-  const document = dom.window.document;
+  const $ = cheerio.load(html);
   const paragraphs: Paragraph[] = [];
 
-  // Process all top-level elements
-  const body = document.body || document;
-  const bodyElement = body as Element;
-  const elements = Array.from(
-    bodyElement.children.length > 0 ? bodyElement.children : [bodyElement]
-  ) as Element[];
+  // Process all top-level elements in the body
+  const body = $("body");
+  const elements = body.children().length > 0 ? body.children() : body;
 
-  for (const element of elements) {
-    const tagName = element.tagName.toLowerCase();
+  elements.each((_: number, element: any) => {
+    const $el = $(element);
+    const tagName = $el.prop("tagName")?.toLowerCase() || "";
 
     // Headings
     if (tagName === "h1" || tagName === "h2" || tagName === "h3") {
-      const textRuns = extractTextRuns(element);
+      const textRuns = extractTextRuns($, $el);
       paragraphs.push({
         textRuns,
         heading: tagName === "h1" ? "HEADING_1" : tagName === "h2" ? "HEADING_2" : "HEADING_3",
@@ -84,28 +82,28 @@ export function parseHTMLToParagraphs(html: string): Paragraph[] {
     }
     // Paragraphs
     else if (tagName === "p") {
-      const textRuns = extractTextRuns(element);
+      const textRuns = extractTextRuns($, $el);
       if (textRuns.length > 0) {
         paragraphs.push({ textRuns, heading: "NORMAL_TEXT" });
       }
     }
     // Lists
     else if (tagName === "ul" || tagName === "ol") {
-      const listItems = element.querySelectorAll("li");
-      for (const item of Array.from(listItems) as Element[]) {
-        const textRuns = extractTextRuns(item);
+      $el.find("li").each((_: number, item: any) => {
+        const $item = $(item);
+        const textRuns = extractTextRuns($, $item);
         if (textRuns.length > 0) {
           paragraphs.push({
             textRuns,
             listType: tagName === "ul" ? "UNORDERED_LIST" : "ORDERED_LIST",
           });
         }
-      }
+      });
     }
     // Code blocks
     else if (tagName === "pre") {
-      const codeElement = element.querySelector("code");
-      const codeText = codeElement?.textContent || element.textContent || "";
+      const codeElement = $el.find("code");
+      const codeText = codeElement.length > 0 ? codeElement.text() : $el.text();
       if (codeText.trim()) {
         paragraphs.push({
           textRuns: [{ text: codeText }],
@@ -115,15 +113,15 @@ export function parseHTMLToParagraphs(html: string): Paragraph[] {
     }
     // Blockquotes
     else if (tagName === "blockquote") {
-      const textRuns = extractTextRuns(element);
+      const textRuns = extractTextRuns($, $el);
       if (textRuns.length > 0) {
         paragraphs.push({ textRuns, heading: "NORMAL_TEXT" });
       }
     }
     // Images
     else if (tagName === "img") {
-      const src = element.getAttribute("src") || "";
-      const alt = element.getAttribute("alt") || "";
+      const src = $el.attr("src") || "";
+      const alt = $el.attr("alt") || "";
       if (src) {
         paragraphs.push({
           textRuns: alt ? [{ text: alt }] : [],
@@ -133,13 +131,12 @@ export function parseHTMLToParagraphs(html: string): Paragraph[] {
     }
     // Divs - treat as paragraphs
     else if (tagName === "div") {
-      const textRuns = extractTextRuns(element);
+      const textRuns = extractTextRuns($, $el);
       if (textRuns.length > 0) {
         paragraphs.push({ textRuns, heading: "NORMAL_TEXT" });
       }
     }
-  }
+  });
 
   return paragraphs;
 }
-

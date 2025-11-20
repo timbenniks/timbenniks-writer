@@ -12,9 +12,6 @@ export async function POST(request: NextRequest) {
       model = DEFAULT_MODEL,
       temperature = DEFAULT_TEMPERATURE,
       maxTokens = DEFAULT_MAX_TOKENS,
-      isNewArticle = false,
-      reasoning,
-      text,
     } = body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -37,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     // Build API request parameters
     // For GPT-5.1, we use chat.completions which supports streaming
-    // Note: GPT-5.1 specific parameters (reasoning, text) are not yet supported in chat.completions streaming
+    // Note: GPT-5.1 specific parameters (reasoning, text) are not supported in chat.completions streaming
     const requestParams: any = {
       model,
       messages: chatMessages,

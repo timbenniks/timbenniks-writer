@@ -12,7 +12,6 @@ export async function POST(request: NextRequest) {
       model = DEFAULT_MODEL,
       temperature = DEFAULT_TEMPERATURE,
       maxTokens = DEFAULT_MAX_TOKENS,
-      isNewArticle = false,
       reasoning,
       text,
     } = body;

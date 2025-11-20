@@ -222,13 +222,7 @@ export default function AIChatPanel({
             maxTokens: 4000,
             // toneInstructions and articleStructure are now code-only defaults
             // They will be loaded from toneInstructions.ts in the API
-            isNewArticle: true, // Always true for new article generation
-            reasoning: aiConfig.reasoningEffort
-              ? { effort: aiConfig.reasoningEffort }
-              : undefined,
-            text: aiConfig.verbosity
-              ? { verbosity: aiConfig.verbosity }
-              : undefined,
+            // Note: reasoning and text parameters are not supported in streaming API
           };
 
       const response = await fetch(apiEndpoint, {

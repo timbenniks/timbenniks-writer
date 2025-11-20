@@ -39,18 +39,12 @@ export function createOpenAIClient(): OpenAI {
 
 /**
  * Build system prompt with unified Composable Writer instructions
- * @param customInstructions - Custom instructions (optional, uses default if not provided)
  */
-export function buildSystemPrompt(
-  customInstructions?: string
-): string {
+export function buildSystemPrompt(): string {
   // Important: Do not include reasoning or thinking process in your output
   const noReasoningInstruction = "CRITICAL: You are The Composable Writer. Provide ONLY your final output. Never include your reasoning process, thinking steps, internal thoughts, or meta-commentary. Only provide the actual content requested.\n\n";
 
-  // Use provided instructions, or fall back to default unified instructions
-  const instructions = customInstructions?.trim() || COMPOSABLE_WRITER_INSTRUCTIONS;
-
-  return `${noReasoningInstruction}${instructions}
+  return `${noReasoningInstruction}${COMPOSABLE_WRITER_INSTRUCTIONS}
 
 Remember: Always follow these guidelines. Provide only the final output, never your reasoning process.`;
 }
