@@ -13,6 +13,8 @@ export async function POST(request: NextRequest) {
       temperature = DEFAULT_TEMPERATURE,
       maxTokens = DEFAULT_MAX_TOKENS,
       toneInstructions,
+      isNewArticle = false,
+      articleStructure,
       reasoning,
       text,
     } = body;
@@ -28,7 +30,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Build messages with system prompt
-    const systemPrompt = buildSystemPrompt(toneInstructions);
+    // Include article structure for full article generation only
+    const systemPrompt = buildSystemPrompt(
+      toneInstructions,
+      isNewArticle === true,
+      articleStructure
+    );
     const chatMessages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
       ...messages,
@@ -67,10 +74,14 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         try {
           for await (const chunk of stream) {
-            const content = chunk.choices[0]?.delta?.content || "";
+            const delta = chunk.choices[0]?.delta;
+            
+            // Only send content, ignore reasoning tokens if present
+            // For GPT-5.1, reasoning might be in delta.reasoning, we only want delta.content
+            const content = delta?.content || "";
 
             if (content) {
-              // Send chunk as SSE
+              // Send chunk as SSE (only output content, not reasoning)
               const data = JSON.stringify({
                 type: "chunk",
                 content,

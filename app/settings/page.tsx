@@ -4,7 +4,11 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import type { GitHubConfig } from "../types/github";
-import { INPUT_CLASSES, BUTTON_PRIMARY_CLASSES, BUTTON_SECONDARY_CLASSES } from "../utils/constants";
+import {
+  INPUT_CLASSES,
+  BUTTON_PRIMARY_CLASSES,
+  BUTTON_SECONDARY_CLASSES,
+} from "../utils/constants";
 
 function SettingsPageContent() {
   const router = useRouter();
@@ -23,7 +27,7 @@ function SettingsPageContent() {
     type: "success" | "error" | null;
     message: string;
   }>({ type: null, message: "" });
-  
+
   // Google connection state
   const [googleStatus, setGoogleStatus] = useState<{
     connected: boolean;
@@ -43,6 +47,7 @@ function SettingsPageContent() {
     reasoningEffort: "none" as "none" | "low" | "medium" | "high",
     verbosity: "medium" as "low" | "medium" | "high",
     toneInstructions: "",
+    articleStructure: "",
   });
   const [isTestingAI, setIsTestingAI] = useState(false);
   const [aiTestStatus, setAiTestStatus] = useState<{
@@ -50,6 +55,7 @@ function SettingsPageContent() {
     message: string;
   }>({ type: null, message: "" });
   const [toneInstructionsSaved, setToneInstructionsSaved] = useState(false);
+  const [articleStructureSaved, setArticleStructureSaved] = useState(false);
 
   // Load config from localStorage on mount
   useEffect(() => {
@@ -73,11 +79,12 @@ function SettingsPageContent() {
         console.error("Failed to parse saved AI settings:", e);
       }
     } else {
-      // Load default tone instructions if none exist
+      // Load default tone instructions and article structure if none exist
       import("../utils/toneInstructions").then((module) => {
         const defaultSettings = {
           ...aiSettings,
           toneInstructions: module.DEFAULT_TONE_INSTRUCTIONS,
+          articleStructure: module.ARTICLE_STRUCTURE_INSTRUCTIONS,
         };
         setAiSettings(defaultSettings);
         localStorage.setItem("aiSettings", JSON.stringify(defaultSettings));
@@ -117,13 +124,13 @@ function SettingsPageContent() {
         type: "success",
         message: "Successfully connected to Google! Verifying...",
       });
-      
+
       // Refresh status with retries (cookies need time to be set)
       const checkStatus = async (retries = 3) => {
         try {
           const response = await fetch("/api/google/status");
           const data = await response.json();
-          
+
           if (data.connected) {
             setGoogleStatus({
               connected: true,
@@ -133,7 +140,9 @@ function SettingsPageContent() {
             });
             setGoogleMessage({
               type: "success",
-              message: `Successfully connected to Google${data.email ? ` (${data.email})` : ""}!`,
+              message: `Successfully connected to Google${
+                data.email ? ` (${data.email})` : ""
+              }!`,
             });
             // Clear message after 5 seconds
             setTimeout(() => {
@@ -146,7 +155,8 @@ function SettingsPageContent() {
             setGoogleStatus({ connected: false, loading: false });
             setGoogleMessage({
               type: "error",
-              message: "Connection completed but verification failed. Please refresh the page or try again.",
+              message:
+                "Connection completed but verification failed. Please refresh the page or try again.",
             });
           }
         } catch (error) {
@@ -157,15 +167,16 @@ function SettingsPageContent() {
             setGoogleStatus({ connected: false, loading: false });
             setGoogleMessage({
               type: "error",
-              message: "Connection completed but failed to verify. Please refresh the page.",
+              message:
+                "Connection completed but failed to verify. Please refresh the page.",
             });
           }
         }
       };
-      
+
       // Start checking status
       checkStatus();
-      
+
       // Clear URL params
       router.replace("/settings");
     } else if (googleError) {
@@ -328,7 +339,8 @@ function SettingsPageContent() {
           messages: [
             {
               role: "user",
-              content: "Hello! Please respond with a brief confirmation that you're working.",
+              content:
+                "Hello! Please respond with a brief confirmation that you're working.",
             },
           ],
           model: aiSettings.model,
@@ -374,7 +386,10 @@ function SettingsPageContent() {
               Configure your GitHub repository and Google Docs integration
             </p>
           </div>
-          <button onClick={() => router.push("/")} className={BUTTON_SECONDARY_CLASSES}>
+          <button
+            onClick={() => router.push("/")}
+            className={BUTTON_SECONDARY_CLASSES}
+          >
             Back to Articles
           </button>
         </div>
@@ -396,8 +411,14 @@ function SettingsPageContent() {
           <div className="space-y-6">
             {/* Repository */}
             <div>
-              <label htmlFor="settings-repo" className="block text-sm font-medium text-gray-700 mb-2">
-                Repository <span className="text-red-500" aria-label="required">*</span>
+              <label
+                htmlFor="settings-repo"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
+                Repository{" "}
+                <span className="text-red-500" aria-label="required">
+                  *
+                </span>
               </label>
               <input
                 id="settings-repo"
@@ -416,8 +437,14 @@ function SettingsPageContent() {
 
             {/* Branch */}
             <div>
-              <label htmlFor="settings-branch" className="block text-sm font-medium text-gray-700 mb-2">
-                Branch <span className="text-red-500" aria-label="required">*</span>
+              <label
+                htmlFor="settings-branch"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
+                Branch{" "}
+                <span className="text-red-500" aria-label="required">
+                  *
+                </span>
               </label>
               <input
                 id="settings-branch"
@@ -434,7 +461,10 @@ function SettingsPageContent() {
 
             {/* Subfolder Path */}
             <div>
-              <label htmlFor="settings-folder" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="settings-folder"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Subfolder Path
               </label>
               <input
@@ -452,8 +482,14 @@ function SettingsPageContent() {
 
             {/* Personal Access Token */}
             <div>
-              <label htmlFor="settings-token" className="block text-sm font-medium text-gray-700 mb-2">
-                Personal Access Token <span className="text-red-500" aria-label="required">*</span>
+              <label
+                htmlFor="settings-token"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
+                Personal Access Token{" "}
+                <span className="text-red-500" aria-label="required">
+                  *
+                </span>
               </label>
               <div className="relative">
                 <input
@@ -513,8 +549,8 @@ function SettingsPageContent() {
                 </button>
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                Requires{" "}
-                <code className="bg-gray-100 px-1 rounded">repo</code> scope.{" "}
+                Requires <code className="bg-gray-100 px-1 rounded">repo</code>{" "}
+                scope.{" "}
                 <a
                   href="https://github.com/settings/tokens/new"
                   target="_blank"
@@ -528,7 +564,10 @@ function SettingsPageContent() {
 
             {/* Author Name */}
             <div>
-              <label htmlFor="settings-author-name" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="settings-author-name"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Author Name (for commits)
               </label>
               <input
@@ -543,7 +582,10 @@ function SettingsPageContent() {
 
             {/* Author Email */}
             <div>
-              <label htmlFor="settings-author-email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="settings-author-email"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Author Email (for commits)
               </label>
               <input
@@ -572,7 +614,10 @@ function SettingsPageContent() {
 
             {/* Actions */}
             <div className="flex items-center justify-between gap-3 pt-4 border-t border-gray-200">
-              <button onClick={clearConfig} className={BUTTON_SECONDARY_CLASSES}>
+              <button
+                onClick={clearConfig}
+                className={BUTTON_SECONDARY_CLASSES}
+              >
                 Clear Configuration
               </button>
               <div className="flex items-center gap-2 ml-auto">
@@ -601,7 +646,8 @@ function SettingsPageContent() {
               Google Docs Integration
             </h2>
             <p className="text-gray-600">
-              Connect your Google account to export articles directly to Google Docs.
+              Connect your Google account to export articles directly to Google
+              Docs.
             </p>
           </div>
 
@@ -678,14 +724,18 @@ function SettingsPageContent() {
               AI Writing Assistant
             </h2>
             <p className="text-gray-600">
-              Configure OpenAI settings and tone of voice instructions for AI-powered writing assistance.
+              Configure OpenAI settings and tone of voice instructions for
+              AI-powered writing assistance.
             </p>
           </div>
 
           <div className="space-y-6">
             {/* Model Selection */}
             <div>
-              <label htmlFor="ai-model" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="ai-model"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Model
               </label>
               <select
@@ -706,7 +756,10 @@ function SettingsPageContent() {
 
             {/* Temperature */}
             <div>
-              <label htmlFor="ai-temperature" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="ai-temperature"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Temperature: {aiSettings.temperature}
               </label>
               <input
@@ -716,7 +769,9 @@ function SettingsPageContent() {
                 max="2"
                 step="0.1"
                 value={aiSettings.temperature}
-                onChange={(e) => updateAISetting("temperature", parseFloat(e.target.value))}
+                onChange={(e) =>
+                  updateAISetting("temperature", parseFloat(e.target.value))
+                }
                 className="w-full"
               />
               <div className="flex justify-between text-xs text-gray-500 mt-1">
@@ -725,38 +780,55 @@ function SettingsPageContent() {
                 <span>Creative (2.0)</span>
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                Controls randomness. Lower = more focused, Higher = more creative
+                Controls randomness. Lower = more focused, Higher = more
+                creative
               </p>
             </div>
 
             {/* Reasoning Effort */}
             <div>
-              <label htmlFor="ai-reasoning-effort" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="ai-reasoning-effort"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Reasoning Effort
               </label>
               <select
                 id="ai-reasoning-effort"
                 value={aiSettings.reasoningEffort}
-                onChange={(e) => updateAISetting("reasoningEffort", e.target.value)}
+                onChange={(e) =>
+                  updateAISetting("reasoningEffort", e.target.value)
+                }
                 className={INPUT_CLASSES}
               >
-                <option value="none">None - Lowest latency, fastest responses (default)</option>
-                <option value="low">Low - Quick responses, fewer reasoning tokens</option>
+                <option value="none">
+                  None - Lowest latency, fastest responses (default)
+                </option>
+                <option value="low">
+                  Low - Quick responses, fewer reasoning tokens
+                </option>
                 <option value="medium">Medium - Balanced reasoning</option>
-                <option value="high">High - Thorough reasoning, more tokens</option>
+                <option value="high">
+                  High - Thorough reasoning, more tokens
+                </option>
               </select>
               <p className="mt-1 text-xs text-gray-500">
-                Controls how many reasoning tokens are generated before the response. Lower = faster, higher = more thorough.
+                Controls how many reasoning tokens are generated before the
+                response. Lower = faster, higher = more thorough.
                 <br />
                 <span className="text-gray-400 italic">
-                  Tip: With "none", encourage the model to "think" or outline steps in your prompts for better quality.
+                  Tip: With "none", encourage the model to "think" or outline
+                  steps in your prompts for better quality.
                 </span>
               </p>
             </div>
 
             {/* Verbosity */}
             <div>
-              <label htmlFor="ai-verbosity" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="ai-verbosity"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Verbosity
               </label>
               <select
@@ -765,15 +837,25 @@ function SettingsPageContent() {
                 onChange={(e) => updateAISetting("verbosity", e.target.value)}
                 className={INPUT_CLASSES}
               >
-                <option value="low">Low - Concise answers, shorter code (SQL queries, simple generation)</option>
-                <option value="medium">Medium - Balanced detail (default)</option>
-                <option value="high">High - Thorough explanations, longer structured code with inline comments</option>
+                <option value="low">
+                  Low - Concise answers, shorter code (SQL queries, simple
+                  generation)
+                </option>
+                <option value="medium">
+                  Medium - Balanced detail (default)
+                </option>
+                <option value="high">
+                  High - Thorough explanations, longer structured code with
+                  inline comments
+                </option>
               </select>
               <p className="mt-1 text-xs text-gray-500">
-                Controls how many output tokens are generated. Lower = faster, more concise. Higher = more detailed, thorough.
+                Controls how many output tokens are generated. Lower = faster,
+                more concise. Higher = more detailed, thorough.
                 <br />
                 <span className="text-gray-400 italic">
-                  Use high for document explanations or extensive code refactoring. Use low for concise answers or simple code.
+                  Use high for document explanations or extensive code
+                  refactoring. Use low for concise answers or simple code.
                 </span>
               </p>
             </div>
@@ -781,14 +863,27 @@ function SettingsPageContent() {
             {/* Tone of Voice Instructions */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label htmlFor="ai-tone" className="block text-sm font-medium text-gray-700">
+                <label
+                  htmlFor="ai-tone"
+                  className="block text-sm font-medium text-gray-700"
+                >
                   Tone of Voice Instructions
                 </label>
                 <div className="flex items-center gap-3">
                   {toneInstructionsSaved && (
                     <span className="text-xs text-green-600 flex items-center gap-1">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
                       </svg>
                       Saved
                     </span>
@@ -796,8 +891,13 @@ function SettingsPageContent() {
                   <button
                     type="button"
                     onClick={async () => {
-                      const { DEFAULT_TONE_INSTRUCTIONS } = await import("../utils/toneInstructions");
-                      updateAISetting("toneInstructions", DEFAULT_TONE_INSTRUCTIONS);
+                      const { DEFAULT_TONE_INSTRUCTIONS } = await import(
+                        "../utils/toneInstructions"
+                      );
+                      updateAISetting(
+                        "toneInstructions",
+                        DEFAULT_TONE_INSTRUCTIONS
+                      );
                       setToneInstructionsSaved(true);
                       setTimeout(() => setToneInstructionsSaved(false), 2000);
                     }}
@@ -816,14 +916,89 @@ function SettingsPageContent() {
                   setToneInstructionsSaved(true);
                   setTimeout(() => setToneInstructionsSaved(false), 2000);
                 }}
-                placeholder="Describe your writing style, tone, voice, and any specific guidelines..."
+                placeholder="Describe your writing style, tone, voice, and linguistic patterns. This is used for paragraph rewrites and general writing assistance. Article structure is handled automatically when creating new articles."
                 className={`${INPUT_CLASSES} font-mono text-sm`}
               />
               <p className="mt-1 text-xs text-gray-500">
-                Changes are saved automatically. These instructions will be included in all AI prompts to ensure consistent tone and style.
+                Changes are saved automatically. These tone of voice
+                instructions will be included in all AI prompts to ensure
+                consistent writing style and tone.
                 <br />
                 <span className="text-gray-400 italic">
-                  Default instructions include Tim Benniks' writing style, structure, and guidelines from The Composable Writer.
+                  Default instructions include Tim Benniks' writing style and
+                  tone guidelines from The Composable Writer. Article structure
+                  is handled separately when creating new articles.
+                </span>
+              </p>
+            </div>
+
+            {/* Article Structure */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label
+                  htmlFor="ai-structure"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  Article Structure
+                </label>
+                <div className="flex items-center gap-3">
+                  {articleStructureSaved && (
+                    <span className="text-xs text-green-600 flex items-center gap-1">
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                      Saved
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const { ARTICLE_STRUCTURE_INSTRUCTIONS } = await import(
+                        "../utils/toneInstructions"
+                      );
+                      updateAISetting(
+                        "articleStructure",
+                        ARTICLE_STRUCTURE_INSTRUCTIONS
+                      );
+                      setArticleStructureSaved(true);
+                      setTimeout(() => setArticleStructureSaved(false), 2000);
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Load Default Structure
+                  </button>
+                </div>
+              </div>
+              <textarea
+                id="ai-structure"
+                rows={8}
+                value={aiSettings.articleStructure}
+                onChange={(e) => {
+                  updateAISetting("articleStructure", e.target.value);
+                  setArticleStructureSaved(true);
+                  setTimeout(() => setArticleStructureSaved(false), 2000);
+                }}
+                placeholder="Define the structure for new articles. This will be used when creating complete articles from scratch."
+                className={`${INPUT_CLASSES} font-mono text-sm`}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Changes are saved automatically. This structure will be used
+                when creating new articles from scratch.
+                <br />
+                <span className="text-gray-400 italic">
+                  This is separate from tone of voice instructions. Article
+                  structure is only applied when generating complete new
+                  articles, not when rewriting paragraphs.
                 </span>
               </p>
             </div>
@@ -862,13 +1037,14 @@ function SettingsPageContent() {
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading settings...</div>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-gray-600">Loading settings...</div>
+        </div>
+      }
+    >
       <SettingsPageContent />
     </Suspense>
   );
 }
-

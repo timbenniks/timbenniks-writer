@@ -27,6 +27,7 @@ import clsx from "clsx";
 import TurndownService from "turndown";
 import ArticleMetadataPanel, { type ArticleMetadata } from "./ArticleMetadata";
 import HistoryPanel from "./HistoryPanel";
+import AIChatPanel from "./AIChatPanel";
 import type { GitHubConfig } from "../types/github";
 import {
   markdownToHtml,
@@ -427,7 +428,15 @@ const FormatIcon = () => (
   </svg>
 );
 
-const MenuBar = ({ editor }: { editor: TipTapEditor | null }) => {
+const MenuBar = ({ 
+  editor,
+  isAIChatOpen,
+  onToggleAIChat,
+}: { 
+  editor: TipTapEditor | null;
+  isAIChatOpen?: boolean;
+  onToggleAIChat?: () => void;
+}) => {
   const [linkUrl, setLinkUrl] = useState("");
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
@@ -896,6 +905,39 @@ const MenuBar = ({ editor }: { editor: TipTapEditor | null }) => {
           <RedoIcon />
         </button>
       </div>
+
+      {/* AI Chat Button */}
+      {onToggleAIChat && (
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onToggleAIChat}
+            className={clsx(
+              "p-2 rounded-md transition-colors",
+              isAIChatOpen
+                ? "bg-gray-900 text-white"
+                : "text-gray-700 hover:bg-gray-100"
+            )}
+            aria-label="Open AI chat"
+            aria-pressed={isAIChatOpen}
+            title="AI Writing Assistant"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              {/* Main sparkle/star */}
+              <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" />
+              {/* Small sparkle stars around */}
+              <circle cx="6" cy="6" r="1" />
+              <circle cx="18" cy="6" r="1" />
+              <circle cx="6" cy="18" r="1" />
+              <circle cx="18" cy="18" r="1" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -911,7 +953,10 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
   const [isMarkdownOpen, setIsMarkdownOpen] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+  const [selectedText, setSelectedText] = useState<string>("");
+  const [hasFirstVersion, setHasFirstVersion] = useState(false);
   const lastScrollYRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { config: githubConfig } = useGitHubConfig();
@@ -1615,6 +1660,39 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
     return () => clearInterval(interval);
   }, [currentFilePath, githubConfig, currentFileSha, isNewFile]);
 
+  // Track text selection when chat is open
+  useEffect(() => {
+    if (!editor || !isAIChatOpen) {
+      setSelectedText("");
+      return;
+    }
+
+    const updateSelection = () => {
+      const { selection } = editor.state;
+      const { from, to } = selection;
+
+      if (from !== to && from < to) {
+        const text = editor.state.doc.textBetween(from, to, " ");
+        if (text.trim().length > 10) {
+          setSelectedText(text);
+        } else {
+          setSelectedText("");
+        }
+      } else {
+        setSelectedText("");
+      }
+    };
+
+    editor.on("selectionUpdate", updateSelection);
+    editor.on("update", updateSelection);
+
+    return () => {
+      editor.off("selectionUpdate", updateSelection);
+      editor.off("update", updateSelection);
+    };
+  }, [editor, isAIChatOpen]);
+
+
   // Create scroll handler function
   const createScrollHandler = (element: HTMLDivElement) => {
     return () => {
@@ -1681,13 +1759,14 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
-      {/* Header Bar */}
-      <header
-        className={clsx(
-          "bg-white border-b border-gray-200 px-6 py-3 fixed top-0 left-0 right-0 z-30 transition-transform duration-300 ease-in-out",
-          isHeaderVisible ? "translate-y-0" : "-translate-y-full"
-        )}
-      >
+      {/* Header Bar - Hide during onboarding */}
+      {!(isNewFile && !hasFirstVersion) && (
+        <header
+          className={clsx(
+            "bg-white border-b border-gray-200 px-6 py-3 fixed top-0 left-0 right-0 z-30 transition-transform duration-300 ease-in-out",
+            isHeaderVisible ? "translate-y-0" : "-translate-y-full"
+          )}
+        >
         <div className="flex items-center justify-between gap-4">
           {/* Left Side: File Info & Back Link */}
           <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -2081,144 +2160,214 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
           </div>
         </div>
       </header>
+      )}
 
-      {/* Menu Bar - Fixed position, moves to top when header hides */}
-      <div
-        className="fixed left-0 right-0 z-20 bg-white border-b border-gray-200 transition-all duration-300"
-        style={{
-          top: isHeaderVisible ? `${HEADER_HEIGHT}px` : "0px",
-        }}
-      >
-        <MenuBar editor={editor} />
-      </div>
+      {/* Menu Bar - Fixed position, moves to top when header hides - Hide during onboarding */}
+      {!(isNewFile && !hasFirstVersion) && (
+        <div
+          className="fixed left-0 right-0 z-20 bg-white border-b border-gray-200 transition-all duration-300"
+          style={{
+            top: isHeaderVisible ? `${HEADER_HEIGHT}px` : "0px",
+          }}
+        >
+          <MenuBar 
+            editor={editor}
+            isAIChatOpen={isAIChatOpen}
+            onToggleAIChat={() => setIsAIChatOpen(!isAIChatOpen)}
+          />
+        </div>
+      )}
 
       {/* Scrollable Content Area */}
-      <div
-        ref={setScrollContainerRef}
-        className="flex-1 overflow-auto"
-        style={{
-          paddingTop: isHeaderVisible
-            ? `${HEADER_HEIGHT + MENUBAR_HEIGHT}px`
-            : `${MENUBAR_HEIGHT}px`,
-        }}
-      >
-        <div className="max-w-4xl mx-auto px-6 py-8">
-          {/* Cover Image Section */}
-          <div className="mb-6">
-            <div className="relative w-full bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg overflow-hidden group hover:border-gray-400 transition-colors aspect-video">
-              {articleMetadata.heroImage ? (
-                <div className="relative w-full h-full">
-                  <img
-                    src={articleMetadata.heroImage}
-                    alt="Cover"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = "none";
-                    }}
-                  />
-                  <button
-                    onClick={() => updateHeroImage("")}
-                    className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-md hover:bg-black/70 transition-colors"
-                    aria-label="Remove cover image"
-                  >
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
+      <div className="flex-1 flex overflow-hidden">
+        {/* Editor Content - Hide during onboarding */}
+        {!(isNewFile && !hasFirstVersion) && (
+          <div
+            ref={setScrollContainerRef}
+            className={clsx(
+              "flex-1 overflow-y-auto",
+              isAIChatOpen ? "" : "mx-auto"
+            )}
+            style={{
+              paddingTop: isHeaderVisible
+                ? `${HEADER_HEIGHT + MENUBAR_HEIGHT}px`
+                : `${MENUBAR_HEIGHT}px`,
+              maxWidth: isAIChatOpen ? "none" : "56rem", // max-w-4xl
+            }}
+          >
+            <div className="px-6 py-8 max-w-4xl mx-auto">
+            {/* Cover Image Section */}
+            <div className="mb-6">
+              <div className="relative w-full bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg overflow-hidden group hover:border-gray-400 transition-colors aspect-video">
+                {articleMetadata.heroImage ? (
+                  <div className="relative w-full h-full">
+                    <img
+                      src={articleMetadata.heroImage}
+                      alt="Cover"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                    <button
+                      onClick={() => updateHeroImage("")}
+                      className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-md hover:bg-black/70 transition-colors"
+                      aria-label="Remove cover image"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </button>
+                    <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/50 to-transparent">
+                      <label
+                        htmlFor="hero-image-url-overlay"
+                        className="sr-only"
+                      >
+                        Hero image URL
+                      </label>
+                      <input
+                        id="hero-image-url-overlay"
+                        type="url"
+                        value={articleMetadata.heroImage}
+                        onChange={(e) => updateHeroImage(e.target.value)}
+                        placeholder="Change image URL..."
+                        className="w-full px-3 py-2 bg-white/90 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:bg-white"
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label="Hero image URL"
                       />
-                    </svg>
-                  </button>
-                  <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/50 to-transparent">
-                    <label htmlFor="hero-image-url-overlay" className="sr-only">
-                      Hero image URL
-                    </label>
-                    <input
-                      id="hero-image-url-overlay"
-                      type="url"
-                      value={articleMetadata.heroImage}
-                      onChange={(e) => updateHeroImage(e.target.value)}
-                      placeholder="Change image URL..."
-                      className="w-full px-3 py-2 bg-white/90 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:bg-white"
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label="Hero image URL"
-                    />
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center px-4 cursor-pointer">
-                  <div className="text-gray-400">
-                    <ImageIcon />
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center px-4 cursor-pointer">
+                    <div className="text-gray-400">
+                      <ImageIcon />
+                    </div>
+                    <p className="mt-4 text-sm text-gray-600 font-medium">
+                      Add a cover image to your article.
+                    </p>
+                    <div className="mt-4 w-full max-w-md">
+                      <label htmlFor="hero-image-url" className="sr-only">
+                        Hero image URL
+                      </label>
+                      <input
+                        id="hero-image-url"
+                        type="url"
+                        value={articleMetadata.heroImage}
+                        onChange={(e) => updateHeroImage(e.target.value)}
+                        placeholder="Paste image URL here..."
+                        className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label="Hero image URL"
+                      />
+                    </div>
                   </div>
-                  <p className="mt-4 text-sm text-gray-600 font-medium">
-                    Add a cover image to your article.
-                  </p>
-                  <div className="mt-4 w-full max-w-md">
-                    <label htmlFor="hero-image-url" className="sr-only">
-                      Hero image URL
-                    </label>
-                    <input
-                      id="hero-image-url"
-                      type="url"
-                      value={articleMetadata.heroImage}
-                      onChange={(e) => updateHeroImage(e.target.value)}
-                      placeholder="Paste image URL here..."
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label="Hero image URL"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Loading/Error States */}
-          {isLoadingFile && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
-              <div className="flex items-center gap-3">
-                <div className="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-                <p className="text-sm text-blue-800">
-                  Loading file from GitHub...
-                </p>
+                )}
               </div>
             </div>
-          )}
 
-          {loadError && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-sm text-red-800">
-                <strong>Error loading file:</strong> {loadError}
-              </p>
+            {/* Loading/Error States */}
+            {isLoadingFile && (
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
+                <div className="flex items-center gap-3">
+                  <div className="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                  <p className="text-sm text-blue-800">
+                    Loading file from GitHub...
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {loadError && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-sm text-red-800">
+                  <strong>Error loading file:</strong> {loadError}
+                </p>
+              </div>
+            )}
+
+            {/* Title Field */}
+            <div className="mb-6">
+              <label htmlFor="article-title" className="sr-only">
+                Article title
+              </label>
+              <input
+                id="article-title"
+                type="text"
+                value={articleMetadata.title}
+                onChange={(e) => updateTitle(e.target.value)}
+                placeholder="Title"
+                className="w-full text-4xl font-bold text-gray-900 placeholder-gray-400 border-none outline-none focus:outline-none bg-transparent"
+                aria-label="Article title"
+              />
             </div>
-          )}
 
-          {/* Title Field */}
-          <div className="mb-6">
-            <label htmlFor="article-title" className="sr-only">
-              Article title
-            </label>
-            <input
-              id="article-title"
-              type="text"
-              value={articleMetadata.title}
-              onChange={(e) => updateTitle(e.target.value)}
-              placeholder="Title"
-              className="w-full text-4xl font-bold text-gray-900 placeholder-gray-400 border-none outline-none focus:outline-none bg-transparent"
-              aria-label="Article title"
+            {/* Editor Content */}
+            <div className="relative">
+              <EditorContent editor={editor} />
+            </div>
+            </div>
+          </div>
+        )}
+
+        {/* AI Chat Panel - Centered during onboarding, sidebar otherwise */}
+        {(isAIChatOpen || (isNewFile && !hasFirstVersion)) && (
+          <div
+            className={clsx(
+              "overflow-hidden flex items-center justify-center",
+              isNewFile && !hasFirstVersion
+                ? "flex-1 w-full bg-gray-50"
+                : "flex-shrink-0"
+            )}
+            style={{
+              paddingTop: isNewFile && !hasFirstVersion
+                ? "0px"
+                : isHeaderVisible
+                ? `${HEADER_HEIGHT + MENUBAR_HEIGHT}px`
+                : `${MENUBAR_HEIGHT}px`,
+            }}
+          >
+            <AIChatPanel
+              isOpen={true}
+              onClose={() => {
+                if (!(isNewFile && !hasFirstVersion)) {
+                  setIsAIChatOpen(false);
+                }
+              }}
+              isNewArticle={isNewFile}
+              articleTitle={articleMetadata.title}
+              articleDescription={articleMetadata.description}
+              articleContent={editor ? editor.getHTML() : undefined}
+              articleMetadata={{
+                tags: articleMetadata.tags,
+                slug: articleMetadata.slug,
+                date: articleMetadata.date,
+              }}
+              selectedText={selectedText}
+              editor={editor}
+              onContentInserted={() => {
+                if (isNewFile && !hasFirstVersion) {
+                  setHasFirstVersion(true);
+                }
+              }}
+              isOnboarding={isNewFile && !hasFirstVersion}
+              onMetadataUpdate={(metadata) => {
+                // Update article metadata from frontmatter
+                handleMetadataChange({ ...articleMetadata, ...metadata });
+              }}
             />
           </div>
-
-          {/* Editor Content */}
-          <EditorContent editor={editor} />
-        </div>
+        )}
       </div>
 
       {/* Article Metadata Sidebar */}
@@ -2241,7 +2390,6 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
           if (currentFilePath) {
             await loadFileFromGitHub(currentFilePath);
           }
-          setIsHistoryOpen(false);
         }}
       />
 

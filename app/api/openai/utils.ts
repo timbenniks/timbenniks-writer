@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { DEFAULT_TONE_INSTRUCTIONS } from "../../utils/toneInstructions";
+import { DEFAULT_TONE_INSTRUCTIONS, ARTICLE_STRUCTURE_INSTRUCTIONS } from "../../utils/toneInstructions";
 
 /**
  * Get OpenAI API configuration from environment variables
@@ -38,16 +38,64 @@ export function createOpenAIClient(): OpenAI {
 
 /**
  * Build system prompt with tone instructions
+ * @param toneInstructions - Custom tone instructions (optional)
+ * @param includeArticleStructure - Whether to include article structure guidelines (for full article generation)
+ * @param articleStructure - Custom article structure instructions (optional, only used if includeArticleStructure is true)
  */
-export function buildSystemPrompt(toneInstructions?: string): string {
+export function buildSystemPrompt(
+  toneInstructions?: string,
+  includeArticleStructure: boolean = false,
+  articleStructure?: string
+): string {
+  // Important: Do not include reasoning or thinking process in your output
+  const noReasoningInstruction = "IMPORTANT: Provide only your final output. Do not include your reasoning process, thinking steps, or internal thoughts in your response. Only provide the actual content requested.\n\n";
+  
   const basePrompt = `You are an expert writing assistant helping to create and improve articles.`;
 
   // Use provided tone instructions, or fall back to default
   const instructions = toneInstructions?.trim() || DEFAULT_TONE_INSTRUCTIONS;
 
-  return `${basePrompt}
+  // Add article structure if needed (for full article generation)
+  // Use custom structure if provided, otherwise use default
+  const structureSection = includeArticleStructure
+    ? `\n\n${articleStructure?.trim() || ARTICLE_STRUCTURE_INSTRUCTIONS}`
+    : "";
 
-${instructions}
+  // Add frontmatter instructions for full article generation
+  const frontmatterInstructions = includeArticleStructure
+    ? `\n\n**IMPORTANT: When generating a complete article, you MUST include YAML frontmatter at the beginning of your response with the following structure:**
+
+\`\`\`yaml
+---
+title: "Article Title"
+slug: "article-slug"
+description: "A compelling description of the article (150-200 characters)"
+date: "YYYY-MM-DD"
+image: "URL to hero image (optional)"
+canonical_url: "Canonical URL (optional)"
+reading_time: "X min read"
+tags: ["tag1", "tag2", "tag3"]
+draft: false
+---
+
+[Your article content here]
+\`\`\`
+
+The frontmatter should be wrapped in \`---\` markers and include:
+- title: The article title
+- slug: URL-friendly version of the title (lowercase, hyphens instead of spaces)
+- description: A compelling description (150-200 characters)
+- date: Today's date in YYYY-MM-DD format
+- image: Hero image URL (if available)
+- tags: Array of relevant tags (3-5 tags)
+- draft: false (unless it's a draft)
+
+After the frontmatter, provide the full article content in markdown format.`
+    : "";
+
+  return `${noReasoningInstruction}${basePrompt}
+
+${instructions}${structureSection}${frontmatterInstructions}
 
 Please follow these guidelines in all your writing.`;
 }

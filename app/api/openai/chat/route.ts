@@ -13,6 +13,8 @@ export async function POST(request: NextRequest) {
       temperature = DEFAULT_TEMPERATURE,
       maxTokens = DEFAULT_MAX_TOKENS,
       toneInstructions,
+      isNewArticle = false,
+      articleStructure,
       reasoning,
       text,
     } = body;
@@ -25,7 +27,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Build messages with system prompt
-    const systemPrompt = buildSystemPrompt(toneInstructions);
+    // Include article structure for full article generation (when isNewArticle context is present)
+    const includeStructure = body.isNewArticle === true;
+    const systemPrompt = buildSystemPrompt(
+      toneInstructions,
+      includeStructure,
+      articleStructure
+    );
     const chatMessages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
       ...messages,
