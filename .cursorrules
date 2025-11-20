@@ -1,0 +1,628 @@
+# Tim Benniks Writer - Cursor Rules
+
+## Project Overview
+A full-screen rich text editor application built with Next.js 16 and React 19. The application provides a sleek, distraction-free writing experience for creating articles with comprehensive formatting tools, metadata management, markdown export capabilities, and full GitHub integration for version control and file management.
+
+## Tech Stack
+
+### Core Framework
+- **Next.js 16.0.0** - React framework with App Router
+- **React 19.0.0** - UI library
+- **TypeScript 5.6.0** - Type safety
+
+### Rich Text Editor
+- **TipTap 2.8.0** - Headless rich text editor framework
+  - `@tiptap/react` - React integration
+  - `@tiptap/starter-kit` - Basic formatting (bold, italic, headings, lists, blockquote)
+  - `@tiptap/extension-link` - Link support
+  - `@tiptap/extension-placeholder` - Placeholder text
+  - `@tiptap/extension-underline` - Underline formatting
+  - `@tiptap/extension-image` - Image insertion via URL
+  - `@tiptap/extension-code-block-lowlight` - Code blocks with syntax highlighting
+
+### Syntax Highlighting
+- **lowlight 3.1.0** - Code syntax highlighting (uses highlight.js)
+- Supported languages: JavaScript, TypeScript, CSS, HTML, JSON, Python, Bash, SQL
+
+### Markdown Export
+- **turndown 7.1.3** - HTML to Markdown conversion
+
+### GitHub Integration
+- **@octokit/rest 22.0.1** - GitHub REST API client
+- **gray-matter 4.0.3** - YAML frontmatter parsing
+- **js-yaml 4.1.1** - YAML parsing and formatting
+- **diff 8.0.2** - Text diff generation
+- **remark** - Markdown to HTML conversion
+  - `remark-parse` - Markdown parsing
+  - `remark-rehype` - Markdown to HTML AST
+  - `rehype-stringify` - HTML AST to string
+
+### Styling
+- **Tailwind CSS 3.4.17** - Utility-first CSS framework
+- **Google Fonts** - JetBrains Mono for code blocks (via Next.js font optimization)
+
+### Utilities
+- **clsx 2.1.1** - Conditional class names
+
+## Project Structure
+
+```
+/app
+  /api/github
+    /check/route.ts      # Check file SHA for conflict detection
+    /connect/route.ts    # Test GitHub connection
+    /delete/route.ts     # Delete files from GitHub
+    /files/route.ts      # List markdown files with frontmatter
+    /load/route.ts       # Load file content and frontmatter
+    /save/route.ts       # Save/update files on GitHub
+  /article
+    - page.tsx           # Article editor page
+  /components
+    - Editor.tsx          # Main rich text editor component
+    - ArticleMetadata.tsx # Article metadata sidebar panel
+    - DiffView.tsx        # Diff visualization component
+    - HistoryPanel.tsx   # Commit history and version revert panel
+    - GitHubConfigPanel.tsx # GitHub config component (legacy)
+  /settings
+    - page.tsx           # GitHub settings page
+  /types
+    - github.ts          # GitHub-related TypeScript interfaces
+  /utils
+    - markdown.ts        # Markdown/frontmatter utilities
+  - layout.tsx           # Root layout with font configuration
+  - page.tsx             # Home page (articles list)
+  - globals.css          # Global styles including TipTap and syntax highlighting
+```
+
+## Key Features
+
+### Editor Features
+1. **Text Formatting**
+   - Style dropdown: Normal (p), Heading (h2), Subheading (h3)
+   - Bold, Italic
+   - Unordered lists, Ordered lists
+   - Blockquote
+   - Code blocks with syntax highlighting and language selection
+   - Links with URL input
+   - Images with URL input and alt text support
+
+2. **Code Block Features**
+   - Syntax highlighting via lowlight
+   - Language selection dropdown
+   - Code formatting utility (normalizes indentation, removes trailing whitespace)
+   - Auto-formatting on paste
+   - JetBrains Mono font for improved readability
+
+3. **Article Metadata**
+   - Cover image (hero image) with 16:9 aspect ratio enforcement
+   - Title field (synced with metadata panel)
+   - Metadata panel sidebar with:
+     - Slug, Title, Description, Date
+     - Canonical URL, Reading Time
+     - Tags (add/remove)
+     - FAQs (question/answer pairs)
+     - Hero Image URL with preview
+     - Draft status checkbox
+
+4. **Markdown Export**
+   - View markdown preview modal
+   - Copy markdown to clipboard
+   - Preserves code block languages
+   - Converts all editor content to markdown format
+
+### GitHub Integration Features
+1. **Repository Management**
+   - Connect to GitHub repositories via Personal Access Token
+   - Configure repository, branch, and subfolder path
+   - Settings page at `/settings` for configuration
+   - Configuration stored in localStorage
+
+2. **File Operations**
+   - List markdown files from GitHub repository
+   - Load files with frontmatter parsing
+   - Create new articles
+   - Save/update articles with commit messages
+   - Delete articles from GitHub
+   - Conflict detection (checks file SHA before saving)
+
+3. **Frontmatter Handling**
+   - Preserves original frontmatter structure and formatting
+   - Maintains key order and naming conventions (snake_case vs camelCase)
+   - Updates `head.meta` section (twitter:image, twitter:title, twitter:description, keywords)
+   - Preserves tags format (flow vs block style)
+   - Date handling: Always appends `T10:00:00Z` to date-only values to prevent diffs
+   - Preserves existing fields (id, collection_id, etc.)
+
+4. **Article List Page** (`/`)
+   - Grid view of articles with hero images
+   - Search functionality
+   - Tag filtering (sidebar)
+   - Date sorting (newest/oldest)
+   - Draft badge display
+   - Delete button on hover
+   - Click to edit articles
+
+5. **Save Workflow**
+   - Diff view before committing
+   - Commit message input
+   - Conflict detection and warnings
+   - Status indicators (saving, saved, error)
+   - Last saved timestamp
+   - Keyboard shortcut (Cmd/Ctrl+S)
+
+6. **History/Versioning**
+   - View commit history for files
+   - View content of previous commits
+   - Revert to previous versions
+   - Accessible via history button in header
+   - Side panel with commit list and details
+
+7. **Auto-Slug Generation**
+   - Automatically generates slug from title for new articles
+   - Only applies to new articles, not existing ones
+   - Live updates in metadata panel
+   - Can be manually overridden
+
+### UI/UX Patterns
+- Full-screen editor experience
+- Light mode only
+- **Header Bar**: Fixed position at top with file info, status indicators, and action buttons (Save, History, Settings)
+- **Menu Bar**: Fixed position toolbar with rich text formatting icons, always visible
+- **Scroll-based Header Behavior**:
+  - Header hides when scrolling down past threshold (100px)
+  - Header shows when scrolling up or near top (< 10px)
+  - Menu bar moves to top position (0px) when header hides
+  - Smooth transitions (300ms) for show/hide animations
+  - Dynamic padding on scroll container to prevent content overlap
+- Centered toolbar with icon-based buttons
+- Modal overlays for markdown preview, metadata panel, save confirmation, delete confirmation, history panel
+- Smooth transitions and hover states
+- Article cards with hover effects
+- Delete button appears on card hover
+
+## Coding Conventions
+
+### TypeScript
+- Use strict TypeScript (`strict: true` in tsconfig.json)
+- Prefer type imports: `import type { ... }`
+- Use interfaces for component props
+- Export types/interfaces when used across components
+
+### React Patterns
+- Use functional components with hooks
+- Client components must have `"use client"` directive
+- Use `useState` for local component state
+- Use `useEffect` for side effects and prop synchronization
+- Prefer controlled components for inputs
+- Use `useRouter` and `useSearchParams` from `next/navigation` for routing
+- Wrap `useSearchParams` in Suspense boundaries
+
+### Component Structure
+```typescript
+// Component imports
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import clsx from "clsx";
+// ... other imports
+
+// Type definitions
+interface ComponentProps {
+  // props
+}
+
+// Component
+export default function Component({ ... }: ComponentProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // State
+  // Effects
+  // Handlers
+  // Render
+}
+```
+
+### Styling Guidelines
+- Use Tailwind CSS utility classes
+- Use `clsx` for conditional classes
+- Follow Tailwind's spacing scale (p-2, p-4, gap-2, etc.)
+- Use semantic color names: `gray-900`, `gray-700`, `gray-100`
+- Active states: `bg-gray-900 text-white`
+- Hover states: `hover:bg-gray-100`
+- Disabled states: `text-gray-300 cursor-not-allowed`
+- Modal overlays: `fixed inset-0 bg-black/20 z-40`
+- Modal content: `fixed inset-0 z-50 flex items-center justify-center`
+
+### TipTap Patterns
+- Use `useEditor` hook for editor initialization
+- Access editor via `editor` variable (not destructured)
+- Use chain API: `editor.chain().focus().command().run()`
+- Check active state: `editor.isActive("nodeType")`
+- Check capabilities: `editor.can().undo()`
+- Get HTML: `editor.getHTML()`
+- Get JSON: `editor.getJSON()`
+
+### Icon Components
+- Define SVG icons as functional components
+- Use consistent sizing: `w-5 h-5` for toolbar icons, `w-6 h-6` for larger icons
+- Use `stroke="currentColor"` for stroke-based icons
+- Include `viewBox="0 0 24 24"` for consistent scaling
+
+### Code Block Handling
+- Use `CodeBlockLowlight` extension (not default codeBlock)
+- Register languages with lowlight instance
+- Extract language from JSON structure for markdown export
+- Format code blocks using custom `formatCode` utility
+- Handle paste events to auto-format code
+
+### Markdown Export
+- Use TurndownService for HTML to Markdown conversion
+- Configure custom rules for code blocks with language preservation
+- Extract language from TipTap JSON structure
+- Add `data-language` attribute to code elements before conversion
+
+### GitHub API Patterns
+- All GitHub API routes are in `/app/api/github/`
+- Use POST requests for all operations
+- Validate required fields (repo, branch, token, etc.)
+- Handle errors gracefully (404, 409 conflicts, 403 permissions)
+- Return consistent response format: `{ success: boolean, error?: string, ... }`
+- Use Octokit for GitHub API calls
+- Include SHA for optimistic locking on updates/deletes
+
+### Frontmatter Handling
+- Use `gray-matter` to parse frontmatter from markdown files
+- Use `js-yaml` to dump frontmatter with specific options:
+  - `lineWidth: -1` - No line wrapping
+  - `noRefs: true` - No YAML references
+  - `sortKeys: false` - Preserve key order
+  - `indent: 2` - 2-space indentation
+  - `flowLevel: -1` - Block style for root object
+- Preserve original key names (snake_case vs camelCase)
+- Preserve original date format (with time component)
+- Always append `T10:00:00Z` to date-only values
+- Preserve tags array format (flow vs block style)
+- Update `head.meta` section based on metadata fields
+
+### Date Handling
+- Dates in frontmatter should always include time component: `T10:00:00Z`
+- When loading: Extract date part (YYYY-MM-DD) for form input
+- When saving: Append `T10:00:00Z` if date is date-only
+- Preserve original time component if it exists
+- This prevents unnecessary diffs when editing articles
+
+### Slug Generation
+- Use `slugify` function to convert titles to URL-friendly slugs
+- Only auto-generate for new articles (`isNewFile === true`)
+- Track auto-generated slugs to allow manual overrides
+- Live update slug field when title changes (for new articles only)
+
+## Important Notes
+
+### Editor Configuration
+- Disable default `codeBlock` in StarterKit (use CodeBlockLowlight instead)
+- Configure Image extension with `inline: true` and `allowBase64: false`
+- Configure Link extension with `openOnClick: false`
+- Use Placeholder extension for empty state
+
+### State Management
+- Article metadata is managed in Editor component
+- Title and hero image sync bidirectionally between editor and metadata panel
+- Use `useEffect` to sync local state when props change
+- GitHub config stored in localStorage
+- Listen to storage events for config updates
+
+### Aspect Ratios
+- Hero image always maintains 16:9 aspect ratio (`aspect-video`)
+- Use `object-cover` with `object-position: top center` for article cards
+- Use `absolute inset-0` positioning for images in cards
+
+### Font Configuration
+- JetBrains Mono loaded via Next.js font optimization
+- Applied to code blocks via CSS (`font-family: 'JetBrains Mono', ...`)
+- Font variable: `--font-jetbrains-mono`
+
+### Code Formatting
+- Custom `formatCode` function normalizes indentation
+- Detects tabs vs spaces
+- Removes trailing whitespace
+- Removes trailing empty lines
+- Available via toolbar button and auto-format on paste
+
+### Route Structure
+- `/` - Home page (articles list)
+- `/article` - Article editor page
+- `/settings` - GitHub settings page
+- `/api/github/*` - GitHub API routes
+
+### File Operations
+- New articles: Navigate to `/article?new=true`
+- Edit articles: Navigate to `/article?file=<path>`
+- After saving new article: Reload from GitHub and redirect
+- Delete articles: Confirmation modal, then remove from GitHub and list
+
+### Conflict Detection
+- Check file SHA before saving
+- Show warning if file changed remotely
+- Use SHA for optimistic locking
+- Periodic status checks for remote changes
+
+## File-Specific Guidelines
+
+### Editor.tsx
+- Main editor component (~2200 lines)
+- Contains MenuBar component (toolbar)
+- Manages editor instance and article metadata
+- Handles markdown export
+- Handles GitHub file operations (load, save)
+- Contains icon components (BoldIcon, ItalicIcon, etc.)
+- Contains code formatting utilities
+- Manages save modal with diff view
+- Handles keyboard shortcuts (Cmd/Ctrl+S)
+- **Scroll-based header visibility**: Uses callback ref pattern for scroll detection
+- **Fixed positioning**: Header and menu bar use `fixed` positioning relative to viewport
+- **Constants**: HEADER_HEIGHT (57px), MENUBAR_HEIGHT (57px), SCROLL_THRESHOLD (100px), TOP_THRESHOLD (10px)
+- **History Panel**: Integrates HistoryPanel component for commit history and version revert
+
+### ArticleMetadata.tsx
+- Sidebar panel component
+- Manages article metadata form
+- Syncs with Editor component state
+- Exports `ArticleMetadata` interface
+- Handles auto-slug generation for new files
+- Manages tags and FAQs arrays
+
+### page.tsx (Home)
+- Articles list page
+- GitHub configuration loading
+- File listing and filtering
+- Tag filtering sidebar
+- Search and sort functionality
+- Delete functionality with confirmation
+- Article card grid layout
+
+### settings/page.tsx
+- GitHub configuration form
+- Connection testing
+- Config save/clear
+- Redirects to home after save
+
+### DiffView.tsx
+- Displays line-by-line diff
+- Uses `diff` library
+- Shows added/removed lines with colors
+
+### HistoryPanel.tsx
+- Side panel component for commit history
+- Displays commit list with SHA, message, author, date
+- Allows viewing content of previous commits
+- Provides revert functionality
+- Uses GitHub API routes `/api/github/history` and `/api/github/revert`
+- Accessible via history button in editor header
+
+### markdown.ts
+- `markdownToHtml`: Converts markdown to HTML
+- `mapFrontmatterToMetadata`: Maps frontmatter to ArticleMetadata
+- `updateFrontmatter`: Updates existing frontmatter preserving structure
+- `metadataToFrontmatter`: Creates new frontmatter for new files
+- `combineFrontmatterAndContent`: Combines frontmatter and content
+
+### API Routes
+- All routes use POST method
+- Validate inputs
+- Handle errors consistently
+- Return `{ success: boolean, error?: string, ... }`
+- Use Octokit for GitHub operations
+- `/api/github/history` - Fetch commit history for a file
+- `/api/github/revert` - Revert file to a specific commit
+
+## Development Workflow
+
+### Running the Project
+```bash
+npm run dev      # Development server
+npm run build    # Production build
+npm run start    # Start production server
+npm run lint     # Run ESLint
+```
+
+### Adding New Features
+1. Follow existing component patterns
+2. Use TypeScript interfaces for props
+3. Maintain consistent styling with Tailwind
+4. Test with Next.js build (`npm run build`)
+5. Ensure SSR compatibility (check for `typeof window !== "undefined"`)
+
+### Adding TipTap Extensions
+1. Install package: `npm install @tiptap/extension-name`
+2. Import in Editor.tsx
+3. Add to `useEditor` extensions array
+4. Add toolbar button if needed
+5. Style in globals.css if necessary
+
+### Adding Code Languages
+1. Import language from highlight.js
+2. Register with lowlight instance
+3. Add to CODE_LANGUAGES array
+4. Update language dropdown
+
+### Adding GitHub API Routes
+1. Create route file in `/app/api/github/[endpoint]/route.ts`
+2. Export POST function
+3. Validate inputs
+4. Use Octokit for GitHub operations
+5. Return consistent response format
+6. Handle errors appropriately
+
+## Best Practices
+
+1. **Always use TypeScript** - No `any` types unless absolutely necessary (e.g., Turndown node types)
+2. **Client Components** - Mark components with `"use client"` when using hooks or browser APIs
+3. **Accessibility** - Include `aria-label` and `title` attributes on buttons
+4. **Error Handling** - Handle image load errors gracefully, show user-friendly error messages
+5. **Performance** - Use Next.js font optimization for custom fonts
+6. **Code Quality** - Run `npm run build` before committing to catch TypeScript errors
+7. **Consistency** - Follow existing patterns for similar features
+8. **UX** - Provide visual feedback for all interactions (hover, active, disabled states)
+9. **Confirmation Dialogs** - Use modals for destructive actions (delete, etc.)
+10. **Loading States** - Show loading indicators for async operations
+11. **Error States** - Display clear error messages to users
+12. **Frontmatter Preservation** - Always preserve original frontmatter structure and formatting
+
+## Common Patterns
+
+### Button with Active State
+```typescript
+<button
+  onClick={() => editor.chain().focus().toggleBold().run()}
+  className={clsx(
+    "p-2 rounded-md transition-colors",
+    editor.isActive("bold")
+      ? "bg-gray-900 text-white"
+      : "text-gray-700 hover:bg-gray-100"
+  )}
+  title="Bold"
+>
+  <BoldIcon />
+</button>
+```
+
+### Modal/Overlay Pattern
+```typescript
+{isOpen && (
+  <>
+    <div
+      className="fixed inset-0 bg-black/20 z-40"
+      onClick={onClose}
+    />
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Modal content */}
+    </div>
+  </>
+)}
+```
+
+### Syncing State with Props
+```typescript
+useEffect(() => {
+  setLocalState(propValue);
+}, [propValue]);
+```
+
+### GitHub API Route Pattern
+```typescript
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { repo, branch, token, ... } = body;
+    
+    if (!repo || !branch || !token) {
+      return NextResponse.json(
+        { success: false, error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+    
+    const [owner, repoName] = repo.split("/");
+    const octokit = new Octokit({ auth: token });
+    
+    // ... operation
+    
+    return NextResponse.json({ success: true, ... });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
+  }
+}
+```
+
+### Loading localStorage Config
+```typescript
+useEffect(() => {
+  const loadConfig = () => {
+    const saved = localStorage.getItem("githubConfig");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setGitHubConfig(parsed);
+      } catch (e) {
+        console.error("Failed to parse config:", e);
+      }
+    }
+  };
+  
+  loadConfig();
+  window.addEventListener("storage", loadConfig);
+  return () => window.removeEventListener("storage", loadConfig);
+}, []);
+```
+
+### Scroll-Based Header Visibility Pattern
+```typescript
+// Constants for scroll behavior
+const HEADER_HEIGHT = 57;
+const MENUBAR_HEIGHT = 57;
+const SCROLL_THRESHOLD = 100;
+const TOP_THRESHOLD = 10;
+
+// State and refs
+const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+const lastScrollYRef = useRef(0);
+const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+// Scroll handler creation
+const createScrollHandler = (element: HTMLDivElement) => {
+  return () => {
+    const currentScrollY = element.scrollTop;
+    const lastScrollY = lastScrollYRef.current;
+
+    if (currentScrollY < TOP_THRESHOLD) {
+      setIsHeaderVisible(true);
+    } else if (currentScrollY < lastScrollY) {
+      setIsHeaderVisible(true);
+    } else if (currentScrollY > lastScrollY && currentScrollY > SCROLL_THRESHOLD) {
+      setIsHeaderVisible(false);
+    }
+
+    lastScrollYRef.current = currentScrollY;
+  };
+};
+
+// Callback ref to attach listener when element is ready
+const setScrollContainerRef = (element: HTMLDivElement | null) => {
+  scrollContainerRef.current = element;
+  if (element) {
+    const handleScroll = createScrollHandler(element);
+    element.addEventListener("scroll", handleScroll, { passive: true });
+    (element as any).__scrollHandler = handleScroll;
+  }
+};
+
+// Fixed header positioning
+<header className="fixed top-0 left-0 right-0 z-30 transition-transform duration-300">
+  {/* Header content */}
+</header>
+
+// Fixed menu bar with dynamic top position
+<div
+  className="fixed left-0 right-0 z-20 transition-all duration-300"
+  style={{ top: isHeaderVisible ? `${HEADER_HEIGHT}px` : "0px" }}
+>
+  <MenuBar />
+</div>
+
+// Scroll container with dynamic padding
+<div
+  ref={setScrollContainerRef}
+  style={{
+    paddingTop: isHeaderVisible
+      ? `${HEADER_HEIGHT + MENUBAR_HEIGHT}px`
+      : `${MENUBAR_HEIGHT}px`,
+  }}
+>
+  {/* Content */}
+</div>
+```
