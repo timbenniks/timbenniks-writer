@@ -21,7 +21,7 @@ export function useGitHubFiles(config: GitHubConfig | null) {
           repo: config.repo,
           branch: config.branch,
           folder: config.folder,
-          token: config.token,
+          // Token comes from environment variables on the server
         }),
       });
 

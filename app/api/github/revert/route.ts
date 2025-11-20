@@ -17,7 +17,6 @@ export async function POST(request: NextRequest) {
       filePath,
       commitSha,
       commitMessage,
-      token,
       authorName,
       authorEmail,
     } = body;
@@ -28,10 +27,18 @@ export async function POST(request: NextRequest) {
       "filePath",
       "commitSha",
       "commitMessage",
-      "token",
     ]);
     if (!validation.isValid) {
       return validation.error!;
+    }
+
+    // Get token from environment variables
+    const token = process.env.GITHUB_TOKEN;
+    if (!token) {
+      return NextResponse.json(
+        { success: false, error: "GitHub token not configured. Please set GITHUB_TOKEN in .env.local" },
+        { status: 500 }
+      );
     }
 
     const repoResult = parseRepo(repo);

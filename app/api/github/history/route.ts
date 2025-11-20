@@ -22,11 +22,20 @@ export interface GitHubHistoryResponse {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { repo, branch, filePath, token } = body;
+    const { repo, branch, filePath } = body;
 
-    const validation = validateGitHubFields(body, ["repo", "branch", "filePath", "token"]);
+    const validation = validateGitHubFields(body, ["repo", "branch", "filePath"]);
     if (!validation.isValid) {
       return validation.error!;
+    }
+
+    // Get token from environment variables
+    const token = process.env.GITHUB_TOKEN;
+    if (!token) {
+      return NextResponse.json(
+        { success: false, error: "GitHub token not configured. Please set GITHUB_TOKEN in .env.local" },
+        { status: 500 }
+      );
     }
 
     const repoResult = parseRepo(repo);

@@ -9,11 +9,19 @@ export async function POST(request: NextRequest) {
       "repo",
       "branch",
       "filePath",
-      "token",
       "currentSha",
     ]);
     if (!validation.isValid) {
       return validation.error!;
+    }
+
+    // Get token from environment variables
+    const token = process.env.GITHUB_TOKEN;
+    if (!token) {
+      return NextResponse.json(
+        { success: false, error: "GitHub token not configured. Please set GITHUB_TOKEN in .env.local" },
+        { status: 500 }
+      );
     }
 
     const repoResult = parseRepo(body.repo);
@@ -21,7 +29,7 @@ export async function POST(request: NextRequest) {
       return repoResult;
     }
     const { owner, repoName } = repoResult;
-    const { filePath, currentSha, token, branch } = body;
+    const { filePath, currentSha, branch } = body;
 
     // Initialize Octokit
     const octokit = new Octokit({

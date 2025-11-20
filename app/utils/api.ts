@@ -14,7 +14,7 @@ export async function githubApiRequest(
     body: JSON.stringify({
       repo: config.repo,
       branch: config.branch,
-      token: config.token,
+      // Token comes from environment variables on the server
       ...additionalBody,
     }),
   });

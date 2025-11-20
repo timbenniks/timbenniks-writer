@@ -79,7 +79,7 @@ export default function GitHubPage() {
           repo: githubConfig.repo,
           branch: githubConfig.branch,
           folder: githubConfig.folder,
-          token: githubConfig.token,
+          // Token comes from environment variables on the server
         }),
       });
 

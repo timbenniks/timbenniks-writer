@@ -1013,7 +1013,7 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
           repo: githubConfig.repo,
           branch: githubConfig.branch,
           filePath,
-          token: githubConfig.token,
+          // Token comes from environment variables on the server
         }),
       });
 
@@ -1294,7 +1294,7 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
           repo: githubConfig.repo,
           branch: githubConfig.branch,
           filePath: currentFilePath,
-          token: githubConfig.token,
+          // Token comes from environment variables on the server
           currentSha: currentFileSha,
         }),
       });
@@ -1407,7 +1407,7 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
           content: fullMarkdown,
           commitMessage: commitMessage.trim(),
           sha: isNewFile ? undefined : currentFileSha, // Omit SHA for new files
-          token: githubConfig.token,
+          // Token comes from environment variables on the server
           authorName: githubConfig.authorName,
           authorEmail: githubConfig.authorEmail,
         }),

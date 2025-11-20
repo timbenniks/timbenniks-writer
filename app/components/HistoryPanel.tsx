@@ -65,7 +65,7 @@ export default function HistoryPanel({
           repo: githubConfig.repo,
           branch: githubConfig.branch,
           filePath,
-          token: githubConfig.token,
+          // Token comes from environment variables on the server
         }),
       });
 
@@ -97,7 +97,7 @@ export default function HistoryPanel({
           repo: githubConfig.repo,
           branch: commitSha, // Use commit SHA as ref
           filePath,
-          token: githubConfig.token,
+          // Token comes from environment variables on the server
         }),
       });
 
@@ -141,7 +141,7 @@ export default function HistoryPanel({
           filePath,
           commitSha,
           commitMessage: `Revert to: ${commit.message}`,
-          token: githubConfig.token,
+          // Token comes from environment variables on the server
           authorName: githubConfig.authorName,
           authorEmail: githubConfig.authorEmail,
         }),

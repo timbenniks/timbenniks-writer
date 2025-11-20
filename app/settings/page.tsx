@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import type { GitHubConfig } from "../types/github";
@@ -17,16 +17,32 @@ function SettingsPageContent() {
     repo: "",
     branch: "main",
     folder: "",
-    token: "",
+    token: "", // Not used anymore, kept for type compatibility
     authorName: "",
     authorEmail: "",
   });
-  const [showToken, setShowToken] = useState(false);
+  const [githubTokenConfigured, setGitHubTokenConfigured] = useState<boolean | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [testStatus, setTestStatus] = useState<{
     type: "success" | "error" | null;
     message: string;
   }>({ type: null, message: "" });
+
+  // Repository selection state
+  const [repositories, setRepositories] = useState<Array<{
+    fullName: string;
+    name: string;
+    owner: string;
+    defaultBranch: string;
+    private: boolean;
+    description: string;
+  }>>([]);
+  const [isLoadingRepos, setIsLoadingRepos] = useState(false);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [isLoadingBranches, setIsLoadingBranches] = useState(false);
+  const [repoSearchQuery, setRepoSearchQuery] = useState("");
+  const [showRepoDropdown, setShowRepoDropdown] = useState(false);
+  const repoInputRef = useRef<HTMLInputElement>(null);
 
   // Google connection state
   const [googleStatus, setGoogleStatus] = useState<{
@@ -54,6 +70,57 @@ function SettingsPageContent() {
     message: string;
   }>({ type: null, message: "" });
 
+  // Define load functions first
+  const loadBranches = async (repo: string, autoSelectDefault: boolean = false) => {
+    if (!repo) return;
+    
+    setIsLoadingBranches(true);
+    try {
+      const response = await fetch("/api/github/branches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setBranches(data.branches || []);
+        // Auto-select default branch if requested and available
+        if (autoSelectDefault && data.branches && data.branches.length > 0) {
+          const repoData = repositories.find((r) => r.fullName === repo);
+          const defaultBranch = repoData?.defaultBranch || data.branches[0];
+          setLocalConfig((prev) => ({ ...prev, branch: defaultBranch }));
+        } else if (data.branches.length > 0 && !data.branches.includes(localConfig.branch)) {
+          // Select first branch if current is invalid
+          setLocalConfig((prev) => ({ ...prev, branch: data.branches[0] }));
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load branches:", e);
+    } finally {
+      setIsLoadingBranches(false);
+    }
+  };
+
+
+  const loadRepositories = async () => {
+    setIsLoadingRepos(true);
+    try {
+      const response = await fetch("/api/github/repos");
+      const data = await response.json();
+      if (data.success) {
+        setRepositories(data.repos || []);
+        // If a repo is already selected, load its branches
+        if (localConfig.repo) {
+          loadBranches(localConfig.repo, false);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load repositories:", e);
+    } finally {
+      setIsLoadingRepos(false);
+    }
+  };
+
   // Load config from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem("githubConfig");
@@ -61,6 +128,10 @@ function SettingsPageContent() {
       try {
         const parsed = JSON.parse(saved);
         setLocalConfig(parsed);
+        // Set search query to show selected repo
+        if (parsed.repo) {
+          setRepoSearchQuery(parsed.repo);
+        }
       } catch (e) {
         console.error("Failed to parse saved GitHub config:", e);
       }
@@ -85,6 +156,27 @@ function SettingsPageContent() {
       }
     };
     loadAIConfig();
+
+    // Load GitHub token status from environment variables
+    const loadGitHubConfig = async () => {
+      try {
+        const response = await fetch("/api/github/config");
+        const data = await response.json();
+        if (data.success) {
+          setGitHubTokenConfigured(data.tokenConfigured || false);
+          // If token is configured, load repositories
+          if (data.tokenConfigured) {
+            loadRepositories();
+          }
+        } else {
+          setGitHubTokenConfigured(false);
+        }
+      } catch (e) {
+        console.error("Failed to load GitHub config:", e);
+        setGitHubTokenConfigured(false);
+      }
+    };
+    loadGitHubConfig();
   }, []);
 
   // Check Google connection status
@@ -186,15 +278,38 @@ function SettingsPageContent() {
   }, [searchParams, router]);
 
   const updateField = (field: keyof GitHubConfig, value: string) => {
-    setLocalConfig((prev) => ({ ...prev, [field]: value }));
+    setLocalConfig((prev) => {
+      const updated = { ...prev, [field]: value };
+      
+      // When repo changes, load branches and reset folder
+      if (field === "repo" && value) {
+        updated.folder = ""; // Reset folder when repo changes
+        updated.branch = ""; // Reset branch when repo changes
+        setBranches([]);
+        setRepoSearchQuery(""); // Clear search query when repo is selected
+        setShowRepoDropdown(false); // Hide dropdown
+        loadBranches(value, true); // Auto-select default branch
+      }
+      
+      return updated;
+    });
     setTestStatus({ type: null, message: "" });
   };
 
+
   const testConnection = async () => {
-    if (!localConfig.repo || !localConfig.branch || !localConfig.token) {
+    if (!localConfig.repo || !localConfig.branch) {
       setTestStatus({
         type: "error",
         message: "Please fill in all required fields",
+      });
+      return;
+    }
+
+    if (!githubTokenConfigured) {
+      setTestStatus({
+        type: "error",
+        message: "GitHub token not configured. Please set GITHUB_TOKEN in .env.local",
       });
       return;
     }
@@ -211,7 +326,6 @@ function SettingsPageContent() {
         body: JSON.stringify({
           repo: localConfig.repo,
           branch: localConfig.branch,
-          token: localConfig.token,
         }),
       });
 
@@ -245,10 +359,18 @@ function SettingsPageContent() {
   };
 
   const saveConfig = () => {
-    if (!localConfig.repo || !localConfig.branch || !localConfig.token) {
+    if (!localConfig.repo || !localConfig.branch) {
       setTestStatus({
         type: "error",
         message: "Please fill in all required fields",
+      });
+      return;
+    }
+
+    if (!githubTokenConfigured) {
+      setTestStatus({
+        type: "error",
+        message: "GitHub token not configured. Please set GITHUB_TOKEN in .env.local",
       });
       return;
     }
@@ -261,7 +383,12 @@ function SettingsPageContent() {
       return;
     }
 
-    localStorage.setItem("githubConfig", JSON.stringify(localConfig));
+    // Save config without token (token comes from env vars)
+    const configToSave = {
+      ...localConfig,
+      token: "", // Don't save token, it comes from env vars
+    };
+    localStorage.setItem("githubConfig", JSON.stringify(configToSave));
     // Redirect back to homepage
     router.push("/");
   };
@@ -272,7 +399,7 @@ function SettingsPageContent() {
       repo: "",
       branch: "main",
       folder: "",
-      token: "",
+      token: "", // Not used anymore
       authorName: "",
       authorEmail: "",
     });
@@ -406,7 +533,7 @@ function SettingsPageContent() {
 
           <div className="space-y-6">
             {/* Repository */}
-            <div>
+            <div className="relative">
               <label
                 htmlFor="settings-repo"
                 className="block text-sm font-medium text-gray-700 mb-2"
@@ -416,18 +543,112 @@ function SettingsPageContent() {
                   *
                 </span>
               </label>
-              <input
-                id="settings-repo"
-                type="text"
-                value={localConfig.repo}
-                onChange={(e) => updateField("repo", e.target.value)}
-                placeholder="e.g., timbenniks/blog"
-                className={INPUT_CLASSES}
-                required
-                aria-required="true"
-              />
+              {githubTokenConfigured ? (
+                <>
+                  <input
+                    ref={repoInputRef}
+                    id="settings-repo"
+                    type="text"
+                    value={repoSearchQuery || localConfig.repo}
+                    onChange={(e) => {
+                      const query = e.target.value;
+                      setRepoSearchQuery(query);
+                      setShowRepoDropdown(true);
+                      // If exact match, update config
+                      const exactMatch = repositories.find(
+                        (r) => r.fullName.toLowerCase() === query.toLowerCase()
+                      );
+                      if (exactMatch) {
+                        updateField("repo", exactMatch.fullName);
+                        setRepoSearchQuery("");
+                        setShowRepoDropdown(false);
+                      }
+                    }}
+                    onFocus={() => {
+                      if (repositories.length > 0) {
+                        setShowRepoDropdown(true);
+                      }
+                    }}
+                    onBlur={() => {
+                      // Delay to allow click on dropdown item
+                      setTimeout(() => setShowRepoDropdown(false), 200);
+                    }}
+                    placeholder={isLoadingRepos ? "Loading repositories..." : "Type to search repositories..."}
+                    className={INPUT_CLASSES}
+                    required
+                    aria-required="true"
+                    disabled={isLoadingRepos}
+                    autoComplete="off"
+                  />
+                  {showRepoDropdown && repositories.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      {repositories
+                        .filter((repo) =>
+                          repoSearchQuery
+                            ? repo.fullName.toLowerCase().includes(repoSearchQuery.toLowerCase()) ||
+                              repo.description.toLowerCase().includes(repoSearchQuery.toLowerCase())
+                            : true
+                        )
+                        .slice(0, 10) // Limit to 10 results
+                        .map((repo) => (
+                          <button
+                            key={repo.fullName}
+                            type="button"
+                            onClick={() => {
+                              updateField("repo", repo.fullName);
+                              setRepoSearchQuery("");
+                              setShowRepoDropdown(false);
+                              repoInputRef.current?.blur();
+                            }}
+                            className="w-full text-left px-4 py-2 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="font-medium text-gray-900">
+                                  {repo.fullName}
+                                  {repo.private && (
+                                    <span className="ml-2 text-xs text-gray-500">(Private)</span>
+                                  )}
+                                </div>
+                                {repo.description && (
+                                  <div className="text-xs text-gray-500 mt-0.5 truncate">
+                                    {repo.description}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      {repositories.filter((repo) =>
+                        repoSearchQuery
+                          ? repo.fullName.toLowerCase().includes(repoSearchQuery.toLowerCase()) ||
+                            repo.description.toLowerCase().includes(repoSearchQuery.toLowerCase())
+                          : true
+                      ).length === 0 && (
+                        <div className="px-4 py-2 text-sm text-gray-500">
+                          No repositories found
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <input
+                  id="settings-repo"
+                  type="text"
+                  value={localConfig.repo}
+                  onChange={(e) => updateField("repo", e.target.value)}
+                  placeholder="e.g., timbenniks/blog"
+                  className={INPUT_CLASSES}
+                  required
+                  aria-required="true"
+                  disabled
+                />
+              )}
               <p className="mt-1 text-xs text-gray-500">
-                Format: owner/repo (e.g., timbenniks/blog)
+                {githubTokenConfigured
+                  ? "Type to search repositories from your GitHub account"
+                  : "Configure GITHUB_TOKEN in .env.local to enable repository selection"}
               </p>
             </div>
 
@@ -442,17 +663,43 @@ function SettingsPageContent() {
                   *
                 </span>
               </label>
-              <input
-                id="settings-branch"
-                type="text"
-                value={localConfig.branch}
-                onChange={(e) => updateField("branch", e.target.value)}
-                placeholder="main"
-                className={INPUT_CLASSES}
-                required
-                aria-required="true"
-              />
-              <p className="mt-1 text-xs text-gray-500">Default: main</p>
+              {localConfig.repo && githubTokenConfigured ? (
+                <select
+                  id="settings-branch"
+                  value={localConfig.branch}
+                  onChange={(e) => updateField("branch", e.target.value)}
+                  className={INPUT_CLASSES}
+                  required
+                  aria-required="true"
+                  disabled={isLoadingBranches}
+                >
+                  <option value="">
+                    {isLoadingBranches ? "Loading branches..." : "Select a branch"}
+                  </option>
+                  {branches.map((branch) => (
+                    <option key={branch} value={branch}>
+                      {branch}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  id="settings-branch"
+                  type="text"
+                  value={localConfig.branch}
+                  onChange={(e) => updateField("branch", e.target.value)}
+                  placeholder="main"
+                  className={INPUT_CLASSES}
+                  required
+                  aria-required="true"
+                  disabled={!githubTokenConfigured}
+                />
+              )}
+              <p className="mt-1 text-xs text-gray-500">
+                {localConfig.repo && githubTokenConfigured
+                  ? "Select a branch from the repository"
+                  : "Default: main"}
+              </p>
             </div>
 
             {/* Subfolder Path */}
@@ -470,93 +717,13 @@ function SettingsPageContent() {
                 onChange={(e) => updateField("folder", e.target.value)}
                 placeholder="e.g., content/articles"
                 className={INPUT_CLASSES}
+                disabled={!githubTokenConfigured}
               />
               <p className="mt-1 text-xs text-gray-500">
-                Leave empty to use repository root
+                Enter the folder path relative to repository root (e.g., "content/articles" or "posts/2024"). Leave empty to use repository root.
               </p>
             </div>
 
-            {/* Personal Access Token */}
-            <div>
-              <label
-                htmlFor="settings-token"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Personal Access Token{" "}
-                <span className="text-red-500" aria-label="required">
-                  *
-                </span>
-              </label>
-              <div className="relative">
-                <input
-                  id="settings-token"
-                  type={showToken ? "text" : "password"}
-                  value={localConfig.token}
-                  onChange={(e) => updateField("token", e.target.value)}
-                  placeholder="ghp_xxxxxxxxxxxx"
-                  className={`${INPUT_CLASSES} pr-10`}
-                  required
-                  aria-required="true"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowToken(!showToken)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
-                  aria-label={showToken ? "Hide token" : "Show token"}
-                  aria-pressed={showToken}
-                >
-                  {showToken ? (
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-                      />
-                    </svg>
-                  ) : (
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                      />
-                    </svg>
-                  )}
-                </button>
-              </div>
-              <p className="mt-1 text-xs text-gray-500">
-                Requires <code className="bg-gray-100 px-1 rounded">repo</code>{" "}
-                scope.{" "}
-                <a
-                  href="https://github.com/settings/tokens/new"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline"
-                >
-                  Create token on GitHub
-                </a>
-              </p>
-            </div>
 
             {/* Author Name */}
             <div>
