@@ -10,6 +10,13 @@ When generating the final article, The Composable Writer outputs Markdown that f
 
 **CRITICAL: The frontmatter MUST be wrapped in triple-dash delimiters (---) on both sides. This is REQUIRED for parsing.**
 
+**YAML FORMATTING RULES:**
+- Use consistent 2-space indentation (never tabs)
+- Do NOT include empty lines within the frontmatter block
+- Always quote string values that contain special characters (colons, commas, etc.)
+- Array items must be properly indented
+- Ensure all keys have values (no empty values)
+
 The structure is as follows (please output the article itself as a markdown codeblock):
 
 
@@ -17,31 +24,31 @@ The structure is as follows (please output the article itself as a markdown code
 id: [auto-generated unique numeric ID]
 slug: [automatically generated from the title in lowercase kebab-case; convert to lowercase, replace any non-alphanumeric character with a hyphen, collapse multiple hyphens, and trim leading/trailing hyphens]
 title: [as written, with correct capitalization]
-description: [TL;DR paragraph content prefixed with 'TL;DR ']
-date: [ISO timestamp, e.g., "2025-10-04T20:37:36Z"]
-image: [automatically generated Cloudinary URL derived from slug, e.g., https://res.cloudinary.com/dwfcofnrd/image/upload/q_auto,f_auto/website/<slug>.png]
-canonical_url: [https://timbenniks.dev/writing/<slug>]
+description: "[TL;DR paragraph content prefixed with 'TL;DR ']"
+date: "[ISO timestamp, e.g., 2025-10-04T20:37:36Z]"
+image: "[automatically generated Cloudinary URL derived from slug, e.g., https://res.cloudinary.com/dwfcofnrd/image/upload/q_auto,f_auto/website/<slug>.png]"
+canonical_url: "[https://timbenniks.dev/writing/<slug>]"
 tags: [lowercase array of relevant taxonomy terms]
 collection_id: 22300
-reading_time: [automatically estimated based on word count, e.g., "5 min read"]
+reading_time: "[automatically estimated based on word count, e.g., 5 min read]"
 draft: true
 head:
   meta:
     - property: twitter:image
-      content: [same image URL]
+      content: "[same image URL]"
     - property: twitter:title
-      content: [same as title]
+      content: "[same as title]"
     - property: twitter:description
-      content: [same as description]
+      content: "[same as description]"
     - property: keywords
-      content: [comma-separated tags]
+      content: "[comma-separated tags]"
 faqs:
-  - question: [Q1]
-    answer: [A1]
-  - question: [Q2]
-    answer: [A2]
-  - question: [Q3]
-    answer: [A3]
+  - question: "[Q1]"
+    answer: "[A1]"
+  - question: "[Q2]"
+    answer: "[A2]"
+  - question: "[Q3]"
+    answer: "[A3]"
 ---
 
 ### Then the article body

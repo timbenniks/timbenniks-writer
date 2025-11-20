@@ -524,7 +524,29 @@ export default function AIChatPanel({
                           rawContent = rawContent.trim();
 
                           // Parse frontmatter - gray-matter handles YAML frontmatter with --- delimiters
-                          const parsed = matter(rawContent);
+                          let parsed;
+                          try {
+                            parsed = matter(rawContent);
+                          } catch (parseError: any) {
+                            console.error("❌ YAML parsing error:", parseError.message);
+                            console.log("Raw content preview:", rawContent.substring(0, 2000));
+                            // Try to fix common YAML issues - remove empty lines within frontmatter block
+                            const frontmatterMatch = rawContent.match(/^---\n([\s\S]*?)\n---/);
+                            if (frontmatterMatch) {
+                              let frontmatterYaml = frontmatterMatch[1];
+                              // Remove empty lines (lines with only whitespace)
+                              frontmatterYaml = frontmatterYaml.replace(/^\s*$\n/gm, '');
+                              // Try parsing again with cleaned YAML
+                              try {
+                                parsed = matter(`---\n${frontmatterYaml}\n---\n${rawContent.substring(frontmatterMatch[0].length)}`);
+                              } catch (retryError) {
+                                console.error("❌ Retry parsing also failed:", retryError);
+                                throw parseError; // Re-throw original error
+                              }
+                            } else {
+                              throw parseError;
+                            }
+                          }
 
                           // Check if frontmatter was found
                           if (
@@ -697,7 +719,29 @@ export default function AIChatPanel({
                     rawContent = rawContent.trim();
 
                     // Parse frontmatter - gray-matter handles YAML frontmatter with --- delimiters
-                    const parsed = matter(rawContent);
+                    let parsed;
+                    try {
+                      parsed = matter(rawContent);
+                    } catch (parseError: any) {
+                      console.error("❌ YAML parsing error:", parseError.message);
+                      console.log("Raw content preview:", rawContent.substring(0, 2000));
+                      // Try to fix common YAML issues - remove empty lines within frontmatter block
+                      const frontmatterMatch = rawContent.match(/^---\n([\s\S]*?)\n---/);
+                      if (frontmatterMatch) {
+                        let frontmatterYaml = frontmatterMatch[1];
+                        // Remove empty lines (lines with only whitespace)
+                        frontmatterYaml = frontmatterYaml.replace(/^\s*$\n/gm, '');
+                        // Try parsing again with cleaned YAML
+                        try {
+                          parsed = matter(`---\n${frontmatterYaml}\n---\n${rawContent.substring(frontmatterMatch[0].length)}`);
+                        } catch (retryError) {
+                          console.error("❌ Retry parsing also failed:", retryError);
+                          throw parseError; // Re-throw original error
+                        }
+                      } else {
+                        throw parseError;
+                      }
+                    }
 
                     // Check if frontmatter was found
                     if (parsed.data && Object.keys(parsed.data).length > 0) {
