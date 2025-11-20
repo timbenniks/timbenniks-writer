@@ -536,39 +536,40 @@ export default function AIChatPanel({
                               /^(id|slug|title|description|date|image|canonical_url|tags|collection_id|reading_time|head|faqs):/m;
 
                             if (frontmatterStartPattern.test(rawContent)) {
-                              // Find where frontmatter ends - look for the first markdown heading or significant content break
-                              // Common patterns: ###, ##, #, Introduction, TL;DR, or double newline before content
-                              const contentStartPatterns = [
-                                /^###\s/, // Heading 3
-                                /^##\s/, // Heading 2
-                                /^#\s/, // Heading 1
-                                /^Introduction/i, // Introduction section
-                                /^TL;DR/i, // TL;DR section
-                                /\n\n(?=[A-Z])/, // Double newline before capitalized word (likely content start)
-                              ];
-
+                              // Find where frontmatter ends
+                              // First, check if FAQs section exists and ends the frontmatter
+                              const faqsMatch = rawContent.match(/faqs:\s*\n([\s\S]*?)(?=\n\n\n|\n\n[A-Z#]|$)/);
                               let frontmatterEndIndex = -1;
-                              for (const pattern of contentStartPatterns) {
-                                const match = rawContent.match(pattern);
-                                if (match && match.index !== undefined) {
-                                  // Look backwards from match to find the end of frontmatter
-                                  // Frontmatter typically ends with a blank line or before FAQs
-                                  let endPos = match.index;
 
-                                  // If we found FAQs, frontmatter ends after FAQs section
-                                  const faqsMatch = rawContent
-                                    .substring(0, endPos)
-                                    .match(/faqs:\s*\n([\s\S]*?)(?=\n\n|$)/);
-                                  if (
-                                    faqsMatch &&
-                                    faqsMatch.index !== undefined
-                                  ) {
-                                    endPos =
-                                      faqsMatch.index + faqsMatch[0].length;
+                              if (faqsMatch && faqsMatch.index !== undefined) {
+                                // Frontmatter ends after FAQs section
+                                frontmatterEndIndex = faqsMatch.index + faqsMatch[0].length;
+                                
+                                // Skip any trailing blank lines after FAQs
+                                const afterFaqs = rawContent.substring(frontmatterEndIndex);
+                                const blankLinesMatch = afterFaqs.match(/^(\n+)/);
+                                if (blankLinesMatch) {
+                                  frontmatterEndIndex += blankLinesMatch[0].length;
+                                }
+                              } else {
+                                // No FAQs, look for content start patterns
+                                const contentStartPatterns = [
+                                  /^###\s/m, // Heading 3
+                                  /^##\s/m, // Heading 2
+                                  /^#\s/m, // Heading 1
+                                  /^Introduction/mi, // Introduction section
+                                  /^TL;DR/mi, // TL;DR section
+                                  /\n\n\n+(?=[A-Z#])/m, // Triple+ newline before content
+                                  /\n\n(?=[A-Z][a-z]+ [a-z])/m, // Double newline before sentence (capitalized word followed by lowercase)
+                                ];
+
+                                for (const pattern of contentStartPatterns) {
+                                  const match = rawContent.match(pattern);
+                                  if (match && match.index !== undefined && match.index > 100) {
+                                    // Make sure we're not too early (frontmatter should be at least 100 chars)
+                                    frontmatterEndIndex = match.index;
+                                    break;
                                   }
-
-                                  frontmatterEndIndex = endPos;
-                                  break;
                                 }
                               }
 
@@ -598,6 +599,24 @@ export default function AIChatPanel({
                                     "Failed to parse with added delimiters:",
                                     e
                                   );
+                                }
+                              } else {
+                                // Fallback: if we can't find the end, try to parse everything up to first heading or paragraph
+                                const fallbackMatch = rawContent.match(/\n\n\n+|\n\n(?=[A-Z][a-z]+ [a-z])/m);
+                                if (fallbackMatch && fallbackMatch.index !== undefined && fallbackMatch.index > 100) {
+                                  const frontmatterSection = rawContent
+                                    .substring(0, fallbackMatch.index)
+                                    .trim();
+                                  const contentSection = rawContent
+                                    .substring(fallbackMatch.index)
+                                    .trim();
+
+                                  try {
+                                    const contentWithDelimiters = `---\n${frontmatterSection}\n---\n${contentSection}`;
+                                    parsed = matter(contentWithDelimiters);
+                                  } catch (e) {
+                                    console.warn("Fallback parsing failed:", e);
+                                  }
                                 }
                               }
                             }
@@ -786,35 +805,40 @@ export default function AIChatPanel({
                         /^(id|slug|title|description|date|image|canonical_url|tags|collection_id|reading_time|head|faqs):/m;
 
                       if (frontmatterStartPattern.test(rawContent)) {
-                        // Find where frontmatter ends - look for the first markdown heading or significant content break
-                        // Common patterns: ###, ##, #, Introduction, TL;DR, or double newline before content
-                        const contentStartPatterns = [
-                          /^###\s/, // Heading 3
-                          /^##\s/, // Heading 2
-                          /^#\s/, // Heading 1
-                          /^Introduction/i, // Introduction section
-                          /^TL;DR/i, // TL;DR section
-                          /\n\n(?=[A-Z])/, // Double newline before capitalized word (likely content start)
-                        ];
-
+                        // Find where frontmatter ends
+                        // First, check if FAQs section exists and ends the frontmatter
+                        const faqsMatch = rawContent.match(/faqs:\s*\n([\s\S]*?)(?=\n\n\n|\n\n[A-Z#]|$)/);
                         let frontmatterEndIndex = -1;
-                        for (const pattern of contentStartPatterns) {
-                          const match = rawContent.match(pattern);
-                          if (match && match.index !== undefined) {
-                            // Look backwards from match to find the end of frontmatter
-                            // Frontmatter typically ends with a blank line or before FAQs
-                            let endPos = match.index;
 
-                            // If we found FAQs, frontmatter ends after FAQs section
-                            const faqsMatch = rawContent
-                              .substring(0, endPos)
-                              .match(/faqs:\s*\n([\s\S]*?)(?=\n\n|$)/);
-                            if (faqsMatch && faqsMatch.index !== undefined) {
-                              endPos = faqsMatch.index + faqsMatch[0].length;
+                        if (faqsMatch && faqsMatch.index !== undefined) {
+                          // Frontmatter ends after FAQs section
+                          frontmatterEndIndex = faqsMatch.index + faqsMatch[0].length;
+                          
+                          // Skip any trailing blank lines after FAQs
+                          const afterFaqs = rawContent.substring(frontmatterEndIndex);
+                          const blankLinesMatch = afterFaqs.match(/^(\n+)/);
+                          if (blankLinesMatch) {
+                            frontmatterEndIndex += blankLinesMatch[0].length;
+                          }
+                        } else {
+                          // No FAQs, look for content start patterns
+                          const contentStartPatterns = [
+                            /^###\s/m, // Heading 3
+                            /^##\s/m, // Heading 2
+                            /^#\s/m, // Heading 1
+                            /^Introduction/mi, // Introduction section
+                            /^TL;DR/mi, // TL;DR section
+                            /\n\n\n+(?=[A-Z#])/m, // Triple+ newline before content
+                            /\n\n(?=[A-Z][a-z]+ [a-z])/m, // Double newline before sentence (capitalized word followed by lowercase)
+                          ];
+
+                          for (const pattern of contentStartPatterns) {
+                            const match = rawContent.match(pattern);
+                            if (match && match.index !== undefined && match.index > 100) {
+                              // Make sure we're not too early (frontmatter should be at least 100 chars)
+                              frontmatterEndIndex = match.index;
+                              break;
                             }
-
-                            frontmatterEndIndex = endPos;
-                            break;
                           }
                         }
 
@@ -844,6 +868,24 @@ export default function AIChatPanel({
                               "Failed to parse with added delimiters:",
                               e
                             );
+                          }
+                        } else {
+                          // Fallback: if we can't find the end, try to parse everything up to first heading or paragraph
+                          const fallbackMatch = rawContent.match(/\n\n\n+|\n\n(?=[A-Z][a-z]+ [a-z])/m);
+                          if (fallbackMatch && fallbackMatch.index !== undefined && fallbackMatch.index > 100) {
+                            const frontmatterSection = rawContent
+                              .substring(0, fallbackMatch.index)
+                              .trim();
+                            const contentSection = rawContent
+                              .substring(fallbackMatch.index)
+                              .trim();
+
+                            try {
+                              const contentWithDelimiters = `---\n${frontmatterSection}\n---\n${contentSection}`;
+                              parsed = matter(contentWithDelimiters);
+                            } catch (e) {
+                              console.warn("Fallback parsing failed:", e);
+                            }
                           }
                         }
                       }
