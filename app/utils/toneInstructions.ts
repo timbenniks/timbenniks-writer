@@ -104,5 +104,7 @@ When generating complete articles, follow this structure:
 3. The why
 4. The how
 5. Challenges
-6. Concluding`;
+6. Concluding
+
+max 1200 words`;
 

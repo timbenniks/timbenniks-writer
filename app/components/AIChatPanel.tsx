@@ -226,9 +226,9 @@ export default function AIChatPanel({
           model: aiSettings.model || "gpt-5.1",
           temperature: aiSettings.temperature || 0.7,
           maxTokens: 4000,
-          toneInstructions: aiSettings.toneInstructions || "",
+          // toneInstructions and articleStructure are now code-only defaults
+          // They will be loaded from toneInstructions.ts in the API
           isNewArticle: isNewArticle, // Pass context for article structure
-          articleStructure: aiSettings.articleStructure || "",
           reasoning: aiSettings.reasoningEffort
             ? { effort: aiSettings.reasoningEffort }
             : undefined,

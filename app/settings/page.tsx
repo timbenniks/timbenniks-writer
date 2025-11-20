@@ -46,16 +46,12 @@ function SettingsPageContent() {
     temperature: 0.7,
     reasoningEffort: "none" as "none" | "low" | "medium" | "high",
     verbosity: "medium" as "low" | "medium" | "high",
-    toneInstructions: "",
-    articleStructure: "",
   });
   const [isTestingAI, setIsTestingAI] = useState(false);
   const [aiTestStatus, setAiTestStatus] = useState<{
     type: "success" | "error" | null;
     message: string;
   }>({ type: null, message: "" });
-  const [toneInstructionsSaved, setToneInstructionsSaved] = useState(false);
-  const [articleStructureSaved, setArticleStructureSaved] = useState(false);
 
   // Load config from localStorage on mount
   useEffect(() => {
@@ -74,21 +70,17 @@ function SettingsPageContent() {
     if (savedAISettings) {
       try {
         const parsed = JSON.parse(savedAISettings);
-        setAiSettings(parsed);
+        // Only load model, temperature, reasoningEffort, verbosity
+        // toneInstructions and articleStructure are now code-only defaults
+        setAiSettings({
+          model: parsed.model || "gpt-5.1",
+          temperature: parsed.temperature ?? 0.7,
+          reasoningEffort: parsed.reasoningEffort || "none",
+          verbosity: parsed.verbosity || "medium",
+        });
       } catch (e) {
         console.error("Failed to parse saved AI settings:", e);
       }
-    } else {
-      // Load default tone instructions and article structure if none exist
-      import("../utils/toneInstructions").then((module) => {
-        const defaultSettings = {
-          ...aiSettings,
-          toneInstructions: module.DEFAULT_TONE_INSTRUCTIONS,
-          articleStructure: module.ARTICLE_STRUCTURE_INSTRUCTIONS,
-        };
-        setAiSettings(defaultSettings);
-        localStorage.setItem("aiSettings", JSON.stringify(defaultSettings));
-      });
     }
   }, []);
 
@@ -346,7 +338,6 @@ function SettingsPageContent() {
           model: aiSettings.model,
           temperature: aiSettings.temperature,
           maxTokens: 100,
-          toneInstructions: aiSettings.toneInstructions,
           reasoning: { effort: aiSettings.reasoningEffort },
           text: { verbosity: aiSettings.verbosity },
         }),
@@ -724,8 +715,8 @@ function SettingsPageContent() {
               AI Writing Assistant
             </h2>
             <p className="text-gray-600">
-              Configure OpenAI settings and tone of voice instructions for
-              AI-powered writing assistance.
+              Configure OpenAI settings for AI-powered writing assistance.
+              Tone of voice and article structure instructions are managed in code.
             </p>
           </div>
 
@@ -860,148 +851,6 @@ function SettingsPageContent() {
               </p>
             </div>
 
-            {/* Tone of Voice Instructions */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label
-                  htmlFor="ai-tone"
-                  className="block text-sm font-medium text-gray-700"
-                >
-                  Tone of Voice Instructions
-                </label>
-                <div className="flex items-center gap-3">
-                  {toneInstructionsSaved && (
-                    <span className="text-xs text-green-600 flex items-center gap-1">
-                      <svg
-                        className="w-3 h-3"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                      Saved
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const { DEFAULT_TONE_INSTRUCTIONS } = await import(
-                        "../utils/toneInstructions"
-                      );
-                      updateAISetting(
-                        "toneInstructions",
-                        DEFAULT_TONE_INSTRUCTIONS
-                      );
-                      setToneInstructionsSaved(true);
-                      setTimeout(() => setToneInstructionsSaved(false), 2000);
-                    }}
-                    className="text-xs text-blue-600 hover:text-blue-800 underline"
-                  >
-                    Load Default Instructions
-                  </button>
-                </div>
-              </div>
-              <textarea
-                id="ai-tone"
-                rows={12}
-                value={aiSettings.toneInstructions}
-                onChange={(e) => {
-                  updateAISetting("toneInstructions", e.target.value);
-                  setToneInstructionsSaved(true);
-                  setTimeout(() => setToneInstructionsSaved(false), 2000);
-                }}
-                placeholder="Describe your writing style, tone, voice, and linguistic patterns. This is used for paragraph rewrites and general writing assistance. Article structure is handled automatically when creating new articles."
-                className={`${INPUT_CLASSES} font-mono text-sm`}
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Changes are saved automatically. These tone of voice
-                instructions will be included in all AI prompts to ensure
-                consistent writing style and tone.
-                <br />
-                <span className="text-gray-400 italic">
-                  Default instructions include Tim Benniks' writing style and
-                  tone guidelines from The Composable Writer. Article structure
-                  is handled separately when creating new articles.
-                </span>
-              </p>
-            </div>
-
-            {/* Article Structure */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label
-                  htmlFor="ai-structure"
-                  className="block text-sm font-medium text-gray-700"
-                >
-                  Article Structure
-                </label>
-                <div className="flex items-center gap-3">
-                  {articleStructureSaved && (
-                    <span className="text-xs text-green-600 flex items-center gap-1">
-                      <svg
-                        className="w-3 h-3"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                      Saved
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const { ARTICLE_STRUCTURE_INSTRUCTIONS } = await import(
-                        "../utils/toneInstructions"
-                      );
-                      updateAISetting(
-                        "articleStructure",
-                        ARTICLE_STRUCTURE_INSTRUCTIONS
-                      );
-                      setArticleStructureSaved(true);
-                      setTimeout(() => setArticleStructureSaved(false), 2000);
-                    }}
-                    className="text-xs text-blue-600 hover:text-blue-800 underline"
-                  >
-                    Load Default Structure
-                  </button>
-                </div>
-              </div>
-              <textarea
-                id="ai-structure"
-                rows={8}
-                value={aiSettings.articleStructure}
-                onChange={(e) => {
-                  updateAISetting("articleStructure", e.target.value);
-                  setArticleStructureSaved(true);
-                  setTimeout(() => setArticleStructureSaved(false), 2000);
-                }}
-                placeholder="Define the structure for new articles. This will be used when creating complete articles from scratch."
-                className={`${INPUT_CLASSES} font-mono text-sm`}
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Changes are saved automatically. This structure will be used
-                when creating new articles from scratch.
-                <br />
-                <span className="text-gray-400 italic">
-                  This is separate from tone of voice instructions. Article
-                  structure is only applied when generating complete new
-                  articles, not when rewriting paragraphs.
-                </span>
-              </p>
-            </div>
 
             {/* Test Connection */}
             <div className="flex items-center gap-3">

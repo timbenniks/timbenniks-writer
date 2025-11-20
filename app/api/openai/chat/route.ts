@@ -12,9 +12,7 @@ export async function POST(request: NextRequest) {
       model = DEFAULT_MODEL,
       temperature = DEFAULT_TEMPERATURE,
       maxTokens = DEFAULT_MAX_TOKENS,
-      toneInstructions,
       isNewArticle = false,
-      articleStructure,
       reasoning,
       text,
     } = body;
@@ -28,11 +26,12 @@ export async function POST(request: NextRequest) {
 
     // Build messages with system prompt
     // Include article structure for full article generation (when isNewArticle context is present)
+    // toneInstructions and articleStructure are now code-only defaults (from toneInstructions.ts)
     const includeStructure = body.isNewArticle === true;
     const systemPrompt = buildSystemPrompt(
-      toneInstructions,
+      undefined, // Use default from toneInstructions.ts
       includeStructure,
-      articleStructure
+      undefined // Use default from toneInstructions.ts
     );
     const chatMessages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
