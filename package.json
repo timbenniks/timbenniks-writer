@@ -19,8 +19,10 @@
     "@tiptap/starter-kit": "^2.8.0",
     "clsx": "^2.1.1",
     "diff": "^8.0.2",
+    "googleapis": "^166.0.0",
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.1",
+    "jsdom": "^27.2.0",
     "lowlight": "^3.1.0",
     "next": "^16.0.0",
     "react": "^19.0.0",
@@ -34,6 +36,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.1.0",
     "@types/js-yaml": "^4.0.9",
+    "@types/jsdom": "^27.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import type { GitHubConfig } from "../types/github";
 import { INPUT_CLASSES, BUTTON_PRIMARY_CLASSES, BUTTON_SECONDARY_CLASSES } from "../utils/constants";
 
-export default function SettingsPage() {
+function SettingsPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [localConfig, setLocalConfig] = useState<GitHubConfig>({
     repo: "",
     branch: "main",
@@ -19,6 +20,18 @@ export default function SettingsPage() {
   const [showToken, setShowToken] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testStatus, setTestStatus] = useState<{
+    type: "success" | "error" | null;
+    message: string;
+  }>({ type: null, message: "" });
+  
+  // Google connection state
+  const [googleStatus, setGoogleStatus] = useState<{
+    connected: boolean;
+    email?: string;
+    name?: string;
+    loading: boolean;
+  }>({ connected: false, loading: true });
+  const [googleMessage, setGoogleMessage] = useState<{
     type: "success" | "error" | null;
     message: string;
   }>({ type: null, message: "" });
@@ -35,6 +48,100 @@ export default function SettingsPage() {
       }
     }
   }, []);
+
+  // Check Google connection status
+  useEffect(() => {
+    const checkGoogleStatus = async () => {
+      try {
+        const response = await fetch("/api/google/status");
+        const data = await response.json();
+        setGoogleStatus({
+          connected: data.connected || false,
+          email: data.email,
+          name: data.name,
+          loading: false,
+        });
+      } catch (error) {
+        console.error("Failed to check Google status:", error);
+        setGoogleStatus({ connected: false, loading: false });
+      }
+    };
+
+    checkGoogleStatus();
+  }, []);
+
+  // Handle URL params for Google OAuth callback
+  useEffect(() => {
+    const googleConnected = searchParams.get("google_connected");
+    const googleError = searchParams.get("google_error");
+
+    if (googleConnected === "true") {
+      // Show temporary success message
+      setGoogleMessage({
+        type: "success",
+        message: "Successfully connected to Google! Verifying...",
+      });
+      
+      // Refresh status with retries (cookies need time to be set)
+      const checkStatus = async (retries = 3) => {
+        try {
+          const response = await fetch("/api/google/status");
+          const data = await response.json();
+          
+          if (data.connected) {
+            setGoogleStatus({
+              connected: true,
+              email: data.email,
+              name: data.name,
+              loading: false,
+            });
+            setGoogleMessage({
+              type: "success",
+              message: `Successfully connected to Google${data.email ? ` (${data.email})` : ""}!`,
+            });
+            // Clear message after 5 seconds
+            setTimeout(() => {
+              setGoogleMessage({ type: null, message: "" });
+            }, 5000);
+          } else if (retries > 0) {
+            // Retry after a delay
+            setTimeout(() => checkStatus(retries - 1), 1000);
+          } else {
+            setGoogleStatus({ connected: false, loading: false });
+            setGoogleMessage({
+              type: "error",
+              message: "Connection completed but verification failed. Please refresh the page or try again.",
+            });
+          }
+        } catch (error) {
+          console.error("Failed to check Google status:", error);
+          if (retries > 0) {
+            setTimeout(() => checkStatus(retries - 1), 1000);
+          } else {
+            setGoogleStatus({ connected: false, loading: false });
+            setGoogleMessage({
+              type: "error",
+              message: "Connection completed but failed to verify. Please refresh the page.",
+            });
+          }
+        }
+      };
+      
+      // Start checking status
+      checkStatus();
+      
+      // Clear URL params
+      router.replace("/settings");
+    } else if (googleError) {
+      setGoogleStatus({ connected: false, loading: false });
+      setGoogleMessage({
+        type: "error",
+        message: `Google connection failed: ${decodeURIComponent(googleError)}`,
+      });
+      // Clear URL params
+      router.replace("/settings");
+    }
+  }, [searchParams, router]);
 
   const updateField = (field: keyof GitHubConfig, value: string) => {
     setLocalConfig((prev) => ({ ...prev, [field]: value }));
@@ -132,15 +239,47 @@ export default function SettingsPage() {
     router.push("/");
   };
 
+  // Google connection handlers
+  const connectGoogle = () => {
+    window.location.href = "/api/google/auth";
+  };
+
+  const disconnectGoogle = async () => {
+    try {
+      const response = await fetch("/api/google/disconnect", {
+        method: "POST",
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        setGoogleStatus({ connected: false, loading: false });
+        setGoogleMessage({
+          type: "success",
+          message: "Disconnected from Google",
+        });
+      } else {
+        setGoogleMessage({
+          type: "error",
+          message: data.error || "Failed to disconnect",
+        });
+      }
+    } catch (error: any) {
+      setGoogleMessage({
+        type: "error",
+        message: error.message || "Failed to disconnect",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">GitHub Settings</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
             <p className="text-sm text-gray-600 mt-1">
-              Configure your GitHub repository connection
+              Configure your GitHub repository and Google Docs integration
             </p>
           </div>
           <button onClick={() => router.push("/")} className={BUTTON_SECONDARY_CLASSES}>
@@ -362,8 +501,97 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+
+        {/* Google Docs Integration */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+              Google Docs Integration
+            </h2>
+            <p className="text-gray-600">
+              Connect your Google account to export articles directly to Google Docs.
+            </p>
+          </div>
+
+          <div className="space-y-6">
+            {/* Google Connection Status */}
+            {googleStatus.loading ? (
+              <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
+                Checking connection status...
+              </div>
+            ) : googleStatus.connected ? (
+              <div className="p-4 bg-green-50 rounded-md border border-green-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-green-800">
+                      Connected to Google
+                    </p>
+                    {googleStatus.email && (
+                      <p className="text-xs text-green-700 mt-1">
+                        {googleStatus.name && `${googleStatus.name} • `}
+                        {googleStatus.email}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={disconnectGoogle}
+                    className="px-4 py-2 text-sm font-medium bg-white text-green-800 border border-green-300 rounded-md hover:bg-green-100 hover:border-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                    aria-label="Disconnect Google account"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-gray-50 rounded-md border border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">
+                      Not connected to Google
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Connect your Google account to enable Google Docs export
+                    </p>
+                  </div>
+                  <button
+                    onClick={connectGoogle}
+                    className={BUTTON_PRIMARY_CLASSES}
+                  >
+                    Connect Google Account
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Google Status Messages - Only show if there's a message */}
+            {googleMessage.type && (
+              <div
+                className={clsx(
+                  "p-3 rounded-md text-sm",
+                  googleMessage.type === "success"
+                    ? "bg-green-50 text-green-800 border border-green-200"
+                    : "bg-red-50 text-red-800 border border-red-200"
+                )}
+              >
+                {googleMessage.message}
+              </div>
+            )}
+          </div>
+        </div>
       </main>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-600">Loading settings...</div>
+      </div>
+    }>
+      <SettingsPageContent />
+    </Suspense>
   );
 }
 
