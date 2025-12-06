@@ -21,7 +21,9 @@ function SettingsPageContent() {
     authorName: "",
     authorEmail: "",
   });
-  const [githubTokenConfigured, setGitHubTokenConfigured] = useState<boolean | null>(null);
+  const [githubTokenConfigured, setGitHubTokenConfigured] = useState<
+    boolean | null
+  >(null);
   const [isTesting, setIsTesting] = useState(false);
   const [testStatus, setTestStatus] = useState<{
     type: "success" | "error" | null;
@@ -29,14 +31,16 @@ function SettingsPageContent() {
   }>({ type: null, message: "" });
 
   // Repository selection state
-  const [repositories, setRepositories] = useState<Array<{
-    fullName: string;
-    name: string;
-    owner: string;
-    defaultBranch: string;
-    private: boolean;
-    description: string;
-  }>>([]);
+  const [repositories, setRepositories] = useState<
+    Array<{
+      fullName: string;
+      name: string;
+      owner: string;
+      defaultBranch: string;
+      private: boolean;
+      description: string;
+    }>
+  >([]);
   const [isLoadingRepos, setIsLoadingRepos] = useState(false);
   const [branches, setBranches] = useState<string[]>([]);
   const [isLoadingBranches, setIsLoadingBranches] = useState(false);
@@ -70,10 +74,23 @@ function SettingsPageContent() {
     message: string;
   }>({ type: null, message: "" });
 
+  // Cloudinary config from env vars
+  const [cloudinaryConfigured, setCloudinaryConfigured] = useState<
+    boolean | null
+  >(null);
+
+  // Gemini config from env vars
+  const [geminiConfigured, setGeminiConfigured] = useState<boolean | null>(
+    null
+  );
+
   // Define load functions first
-  const loadBranches = async (repo: string, autoSelectDefault: boolean = false) => {
+  const loadBranches = async (
+    repo: string,
+    autoSelectDefault: boolean = false
+  ) => {
     if (!repo) return;
-    
+
     setIsLoadingBranches(true);
     try {
       const response = await fetch("/api/github/branches", {
@@ -89,7 +106,10 @@ function SettingsPageContent() {
           const repoData = repositories.find((r) => r.fullName === repo);
           const defaultBranch = repoData?.defaultBranch || data.branches[0];
           setLocalConfig((prev) => ({ ...prev, branch: defaultBranch }));
-        } else if (data.branches.length > 0 && !data.branches.includes(localConfig.branch)) {
+        } else if (
+          data.branches.length > 0 &&
+          !data.branches.includes(localConfig.branch)
+        ) {
           // Select first branch if current is invalid
           setLocalConfig((prev) => ({ ...prev, branch: data.branches[0] }));
         }
@@ -100,7 +120,6 @@ function SettingsPageContent() {
       setIsLoadingBranches(false);
     }
   };
-
 
   const loadRepositories = async () => {
     setIsLoadingRepos(true);
@@ -137,6 +156,19 @@ function SettingsPageContent() {
       }
     }
 
+    // Load Cloudinary config status
+    const loadCloudinaryConfig = async () => {
+      try {
+        const response = await fetch("/api/cloudinary/config");
+        const data = await response.json();
+        setCloudinaryConfigured(data.configured || false);
+      } catch (e) {
+        console.error("Failed to load Cloudinary config:", e);
+        setCloudinaryConfigured(false);
+      }
+    };
+    loadCloudinaryConfig();
+
     // Load AI config from environment variables
     const loadAIConfig = async () => {
       try {
@@ -156,6 +188,19 @@ function SettingsPageContent() {
       }
     };
     loadAIConfig();
+
+    // Load Gemini config status
+    const loadGeminiConfig = async () => {
+      try {
+        const response = await fetch("/api/gemini/config");
+        const data = await response.json();
+        setGeminiConfigured(data.configured || false);
+      } catch (e) {
+        console.error("Failed to load Gemini config:", e);
+        setGeminiConfigured(false);
+      }
+    };
+    loadGeminiConfig();
 
     // Load GitHub token status from environment variables
     const loadGitHubConfig = async () => {
@@ -280,7 +325,7 @@ function SettingsPageContent() {
   const updateField = (field: keyof GitHubConfig, value: string) => {
     setLocalConfig((prev) => {
       const updated = { ...prev, [field]: value };
-      
+
       // When repo changes, load branches and reset folder
       if (field === "repo" && value) {
         updated.folder = ""; // Reset folder when repo changes
@@ -290,12 +335,11 @@ function SettingsPageContent() {
         setShowRepoDropdown(false); // Hide dropdown
         loadBranches(value, true); // Auto-select default branch
       }
-      
+
       return updated;
     });
     setTestStatus({ type: null, message: "" });
   };
-
 
   const testConnection = async () => {
     if (!localConfig.repo || !localConfig.branch) {
@@ -309,7 +353,8 @@ function SettingsPageContent() {
     if (!githubTokenConfigured) {
       setTestStatus({
         type: "error",
-        message: "GitHub token not configured. Please set GITHUB_TOKEN in .env.local",
+        message:
+          "GitHub token not configured. Please set GITHUB_TOKEN in .env.local",
       });
       return;
     }
@@ -370,7 +415,8 @@ function SettingsPageContent() {
     if (!githubTokenConfigured) {
       setTestStatus({
         type: "error",
-        message: "GitHub token not configured. Please set GITHUB_TOKEN in .env.local",
+        message:
+          "GitHub token not configured. Please set GITHUB_TOKEN in .env.local",
       });
       return;
     }
@@ -573,7 +619,11 @@ function SettingsPageContent() {
                       // Delay to allow click on dropdown item
                       setTimeout(() => setShowRepoDropdown(false), 200);
                     }}
-                    placeholder={isLoadingRepos ? "Loading repositories..." : "Type to search repositories..."}
+                    placeholder={
+                      isLoadingRepos
+                        ? "Loading repositories..."
+                        : "Type to search repositories..."
+                    }
                     className={INPUT_CLASSES}
                     required
                     aria-required="true"
@@ -585,8 +635,12 @@ function SettingsPageContent() {
                       {repositories
                         .filter((repo) =>
                           repoSearchQuery
-                            ? repo.fullName.toLowerCase().includes(repoSearchQuery.toLowerCase()) ||
-                              repo.description.toLowerCase().includes(repoSearchQuery.toLowerCase())
+                            ? repo.fullName
+                                .toLowerCase()
+                                .includes(repoSearchQuery.toLowerCase()) ||
+                              repo.description
+                                .toLowerCase()
+                                .includes(repoSearchQuery.toLowerCase())
                             : true
                         )
                         .slice(0, 10) // Limit to 10 results
@@ -607,7 +661,9 @@ function SettingsPageContent() {
                                 <div className="font-medium text-gray-900">
                                   {repo.fullName}
                                   {repo.private && (
-                                    <span className="ml-2 text-xs text-gray-500">(Private)</span>
+                                    <span className="ml-2 text-xs text-gray-500">
+                                      (Private)
+                                    </span>
                                   )}
                                 </div>
                                 {repo.description && (
@@ -621,8 +677,12 @@ function SettingsPageContent() {
                         ))}
                       {repositories.filter((repo) =>
                         repoSearchQuery
-                          ? repo.fullName.toLowerCase().includes(repoSearchQuery.toLowerCase()) ||
-                            repo.description.toLowerCase().includes(repoSearchQuery.toLowerCase())
+                          ? repo.fullName
+                              .toLowerCase()
+                              .includes(repoSearchQuery.toLowerCase()) ||
+                            repo.description
+                              .toLowerCase()
+                              .includes(repoSearchQuery.toLowerCase())
                           : true
                       ).length === 0 && (
                         <div className="px-4 py-2 text-sm text-gray-500">
@@ -674,7 +734,9 @@ function SettingsPageContent() {
                   disabled={isLoadingBranches}
                 >
                   <option value="">
-                    {isLoadingBranches ? "Loading branches..." : "Select a branch"}
+                    {isLoadingBranches
+                      ? "Loading branches..."
+                      : "Select a branch"}
                   </option>
                   {branches.map((branch) => (
                     <option key={branch} value={branch}>
@@ -720,10 +782,11 @@ function SettingsPageContent() {
                 disabled={!githubTokenConfigured}
               />
               <p className="mt-1 text-xs text-gray-500">
-                Enter the folder path relative to repository root (e.g., "content/articles" or "posts/2024"). Leave empty to use repository root.
+                Enter the folder path relative to repository root (e.g.,
+                "content/articles" or "posts/2024"). Leave empty to use
+                repository root.
               </p>
             </div>
-
 
             {/* Author Name */}
             <div>
@@ -917,6 +980,213 @@ function SettingsPageContent() {
                   {aiTestStatus.message}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+
+        {/* Gemini Image Generation */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+              AI Image Generation
+            </h2>
+            <p className="text-gray-600">
+              Generate cover images using Google Gemini Imagen 3. Configure via
+              environment variables.
+            </p>
+          </div>
+
+          <div className="space-y-6">
+            {/* Status */}
+            {geminiConfigured === null ? (
+              <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
+                Checking configuration...
+              </div>
+            ) : geminiConfigured ? (
+              <div className="p-4 bg-green-50 rounded-md border border-green-200">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                    <svg
+                      className="w-5 h-5 text-green-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-green-800">
+                      Gemini API Configured
+                    </p>
+                    <p className="text-xs text-green-700 mt-0.5">
+                      You can generate images in the article editor
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-yellow-50 rounded-md border border-yellow-200">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
+                    <svg
+                      className="w-5 h-5 text-yellow-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-yellow-800">
+                      Gemini API Not Configured
+                    </p>
+                    <p className="text-xs text-yellow-700 mt-1">
+                      Add your Gemini API key to enable AI image generation:
+                    </p>
+                    <code className="block mt-2 px-3 py-2 bg-yellow-100 rounded text-xs font-mono text-yellow-900">
+                      GEMINI_API_KEY=your_api_key_here
+                    </code>
+                    <p className="text-xs text-yellow-700 mt-2">
+                      Get your API key from{" "}
+                      <a
+                        href="https://aistudio.google.com/apikey"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-yellow-800"
+                      >
+                        Google AI Studio
+                      </a>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Info */}
+            <div className="text-sm text-gray-500 space-y-2">
+              <p>
+                <strong>Model:</strong> Gemini 3 Pro
+                (gemini-3-pro-image-preview)
+              </p>
+              <p>
+                <strong>Features:</strong> Context-aware cover images,
+                feedback-based refinement, automatic Cloudinary upload
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Cloudinary Configuration */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+              Cloudinary Media Library
+            </h2>
+            <p className="text-gray-600">
+              Select and upload images from your Cloudinary DAM. Configure via
+              environment variables.
+            </p>
+          </div>
+
+          <div className="space-y-6">
+            {/* Status */}
+            {cloudinaryConfigured === null ? (
+              <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
+                Checking configuration...
+              </div>
+            ) : cloudinaryConfigured ? (
+              <div className="p-4 bg-green-50 rounded-md border border-green-200">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                    <svg
+                      className="w-5 h-5 text-green-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-green-800">
+                      Cloudinary Configured
+                    </p>
+                    <p className="text-xs text-green-700 mt-0.5">
+                      You can select images from your media library
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-yellow-50 rounded-md border border-yellow-200">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
+                    <svg
+                      className="w-5 h-5 text-yellow-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-yellow-800">
+                      Cloudinary Not Configured
+                    </p>
+                    <p className="text-xs text-yellow-700 mt-1">
+                      Add your Cloudinary credentials to enable image selection
+                      and upload:
+                    </p>
+                    <code className="block mt-2 px-3 py-2 bg-yellow-100 rounded text-xs font-mono text-yellow-900 space-y-1">
+                      <div>CLOUDINARY_CLOUD_NAME=your_cloud_name</div>
+                      <div>CLOUDINARY_API_KEY=your_api_key</div>
+                      <div>CLOUDINARY_API_SECRET=your_api_secret</div>
+                    </code>
+                    <p className="text-xs text-yellow-700 mt-2">
+                      Find these in your{" "}
+                      <a
+                        href="https://console.cloudinary.com/settings/api-keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-yellow-800"
+                      >
+                        Cloudinary Console
+                      </a>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Info */}
+            <div className="text-sm text-gray-500 space-y-2">
+              <p>
+                <strong>Features:</strong> Media library browser, automatic
+                image optimization, AI image upload
+              </p>
             </div>
           </div>
         </div>

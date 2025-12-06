@@ -19,15 +19,23 @@ export async function markdownToHtml(markdown: string): Promise<string> {
   let html = result.toString();
 
   // Post-process HTML to fix common issues
-  // Remove <p> tags inside <li> elements (invalid HTML)
-  // Use [\s\S] instead of . with s flag for compatibility
+  // Remove <p> tags inside <li> elements - they cause awkward spacing
+  // This handles various cases including nested content, multiple paragraphs, etc.
+
+  // First pass: Simple single paragraph in list item
   html = html.replace(/<li>\s*<p>([\s\S]*?)<\/p>\s*<\/li>/g, '<li>$1</li>');
 
-  // Also handle cases where there might be multiple paragraphs in a list item
-  html = html.replace(/<li>(\s*<p>[\s\S]*?<\/p>\s*)+<\/li>/g, (match) => {
-    // Extract all paragraph content and combine into single list item
-    const content = match.replace(/<\/?p>/g, '').replace(/<li>\s*/, '<li>').replace(/\s*<\/li>/, '</li>');
-    return content;
+  // Second pass: Handle any remaining <p> tags inside <li> (more aggressive)
+  // This regex finds <li> tags and removes any <p></p> wrappers inside them
+  html = html.replace(/<li>([\s\S]*?)<\/li>/g, (match, content) => {
+    // Remove opening and closing <p> tags but preserve the content
+    let cleaned = content
+      .replace(/<p>\s*/g, '')
+      .replace(/\s*<\/p>/g, '<br>')  // Replace closing </p> with <br> for multi-paragraph items
+      .replace(/<br>\s*$/, '')       // Remove trailing <br>
+      .replace(/^\s*<br>/, '')       // Remove leading <br>
+      .trim();
+    return `<li>${cleaned}</li>`;
   });
 
   return html;
