@@ -15,6 +15,7 @@ import {
 } from "./utils/constants";
 import { deleteGitHubFile } from "./utils/api";
 import DeleteConfirmModal from "./components/ui/DeleteConfirmModal";
+import BulkContentstackExportModal from "./components/BulkContentstackExportModal";
 
 export default function Home() {
   const router = useRouter();
@@ -26,6 +27,9 @@ export default function Home() {
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [deleteFile, setDeleteFile] = useState<GitHubFile | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [isBulkExportOpen, setIsBulkExportOpen] = useState(false);
 
   const handleFileClick = (file: GitHubFile) => {
     // Navigate to editor with file info
@@ -124,6 +128,35 @@ export default function Home() {
     });
   };
 
+  const toggleFileSelection = (fileSha: string) => {
+    setSelectedFiles((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(fileSha)) {
+        newSet.delete(fileSha);
+      } else {
+        newSet.add(fileSha);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedFiles.size === filteredFiles.length) {
+      setSelectedFiles(new Set());
+    } else {
+      setSelectedFiles(new Set(filteredFiles.map((f) => f.sha)));
+    }
+  };
+
+  const exitSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedFiles(new Set());
+  };
+
+  const getSelectedFilesForExport = (): GitHubFile[] => {
+    return filteredFiles.filter((f) => selectedFiles.has(f.sha));
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -142,32 +175,77 @@ export default function Home() {
           <div className="flex items-center gap-3">
             {githubConfig && (
               <>
-                <button
-                  onClick={loadFiles}
-                  disabled={isLoading}
-                  className={clsx(
-                    "px-4 py-2 text-sm font-medium rounded-md transition-colors",
-                    isLoading
-                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      : "bg-gray-900 text-white hover:bg-gray-800"
-                  )}
-                >
-                  {isLoading ? "Loading..." : "Refresh"}
-                </button>
-                <button
-                  onClick={() => router.push("/settings")}
-                  className={BUTTON_SECONDARY_CLASSES}
-                >
-                  Settings
-                </button>
+                {isSelectionMode ? (
+                  <>
+                    <span className="text-sm text-gray-600">
+                      {selectedFiles.size} selected
+                    </span>
+                    <button
+                      onClick={toggleSelectAll}
+                      className={BUTTON_SECONDARY_CLASSES}
+                    >
+                      {selectedFiles.size === filteredFiles.length
+                        ? "Deselect All"
+                        : "Select All"}
+                    </button>
+                    <button
+                      onClick={() => setIsBulkExportOpen(true)}
+                      disabled={selectedFiles.size === 0}
+                      className={clsx(
+                        "px-4 py-2 text-sm font-medium rounded-md transition-colors",
+                        selectedFiles.size === 0
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-purple-600 text-white hover:bg-purple-700"
+                      )}
+                    >
+                      Export to Contentstack
+                    </button>
+                    <button
+                      onClick={exitSelectionMode}
+                      className={BUTTON_SECONDARY_CLASSES}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setIsSelectionMode(true)}
+                      className={BUTTON_SECONDARY_CLASSES}
+                      title="Select articles for bulk export"
+                    >
+                      Select
+                    </button>
+                    <button
+                      onClick={loadFiles}
+                      disabled={isLoading}
+                      className={clsx(
+                        "px-4 py-2 text-sm font-medium rounded-md transition-colors",
+                        isLoading
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-gray-900 text-white hover:bg-gray-800"
+                      )}
+                    >
+                      {isLoading ? "Loading..." : "Refresh"}
+                    </button>
+                    <button
+                      onClick={() => router.push("/settings")}
+                      className={BUTTON_SECONDARY_CLASSES}
+                    >
+                      Settings
+                    </button>
+                  </>
+                )}
               </>
             )}
-            <button
-              onClick={() => router.push("/article?new=true")}
-              className={BUTTON_SECONDARY_CLASSES}
-            >
-              New Article
-            </button>
+            {!isSelectionMode && (
+              <button
+                onClick={() => router.push("/article?new=true")}
+                className={BUTTON_SECONDARY_CLASSES}
+              >
+                New Article
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -301,112 +379,237 @@ export default function Home() {
                   {filteredFiles.map((file) => (
                     <article
                       key={file.sha}
-                      className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-lg hover:border-gray-300 transition-all group relative"
+                      className={clsx(
+                        "bg-white rounded-lg shadow-sm border overflow-hidden transition-all group relative",
+                        isSelectionMode && selectedFiles.has(file.sha)
+                          ? "border-purple-500 ring-2 ring-purple-200"
+                          : "border-gray-200 hover:shadow-lg hover:border-gray-300"
+                      )}
+                      onClick={
+                        isSelectionMode
+                          ? () => toggleFileSelection(file.sha)
+                          : undefined
+                      }
                     >
+                      {/* Selection Checkbox */}
+                      {isSelectionMode && (
+                        <div className="absolute top-2 left-2 z-10">
+                          <div
+                            className={clsx(
+                              "w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors",
+                              selectedFiles.has(file.sha)
+                                ? "bg-purple-600 border-purple-600"
+                                : "bg-white/90 border-gray-300 hover:border-purple-400"
+                            )}
+                          >
+                            {selectedFiles.has(file.sha) && (
+                              <svg
+                                className="w-4 h-4 text-white"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={3}
+                                  d="M5 13l4 4L19 7"
+                                />
+                              </svg>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Delete Button */}
-                      <button
-                        onClick={(e) => handleDeleteClick(e, file)}
-                        className="absolute top-2 right-2 z-10 p-2 bg-white/90 backdrop-blur-sm rounded-md shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-600"
-                        aria-label={`Delete article: ${
-                          file.frontmatter?.title || file.name
-                        }`}
-                      >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          aria-hidden="true"
+                      {!isSelectionMode && (
+                        <button
+                          onClick={(e) => handleDeleteClick(e, file)}
+                          className="absolute top-2 right-2 z-10 p-2 bg-white/90 backdrop-blur-sm rounded-md shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-600"
+                          aria-label={`Delete article: ${
+                            file.frontmatter?.title || file.name
+                          }`}
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                          />
-                        </svg>
-                      </button>
-
-                      <Link
-                        href={`/article?file=${encodeURIComponent(file.path)}`}
-                        className="w-full text-left flex flex-col focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 rounded-lg"
-                      >
-                        {/* Hero Image */}
-                        {file.frontmatter?.heroImage && (
-                          <div className="w-full aspect-video bg-gray-100 overflow-hidden rounded-t-lg relative">
-                            <img
-                              src={file.frontmatter.heroImage}
-                              alt={file.frontmatter.title}
-                              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display =
-                                  "none";
-                              }}
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                             />
-                          </div>
-                        )}
+                          </svg>
+                        </button>
+                      )}
 
-                        <div className="p-6">
-                          {/* Date, Reading Time, and Draft Badge */}
-                          <div className="flex items-center gap-3 text-xs text-gray-500 mb-2 flex-wrap">
-                            {file.frontmatter?.date && (
-                              <span>{formatDate(file.frontmatter.date)}</span>
-                            )}
-                            {file.frontmatter?.readingTime && (
-                              <>
-                                {file.frontmatter.date && <span>•</span>}
-                                <span>{file.frontmatter.readingTime}</span>
-                              </>
-                            )}
-                            {file.frontmatter?.draft === true && (
-                              <>
-                                {(file.frontmatter.date ||
-                                  file.frontmatter.readingTime) && (
-                                  <span>•</span>
-                                )}
-                                <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded-full font-medium">
-                                  Draft
-                                </span>
-                              </>
-                            )}
-                          </div>
-
-                          {/* Title */}
-                          <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-gray-700 line-clamp-2">
-                            {file.frontmatter?.title ||
-                              file.name.replace(/\.(md|markdown)$/i, "")}
-                          </h3>
-
-                          {/* Description */}
-                          {file.frontmatter?.description && (
-                            <p className="text-sm text-gray-600 mb-4 line-clamp-2">
-                              {file.frontmatter.description}
-                            </p>
+                      {/* Article Content - Conditionally wrapped */}
+                      {isSelectionMode ? (
+                        <div className="w-full text-left flex flex-col cursor-pointer">
+                          {/* Hero Image */}
+                          {file.frontmatter?.heroImage && (
+                            <div className="w-full aspect-video bg-gray-100 overflow-hidden rounded-t-lg relative">
+                              <img
+                                src={file.frontmatter.heroImage}
+                                alt={file.frontmatter.title}
+                                className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display =
+                                    "none";
+                                }}
+                              />
+                            </div>
                           )}
 
-                          {/* Tags */}
-                          {file.frontmatter?.tags &&
-                            file.frontmatter.tags.length > 0 && (
-                              <div className="flex flex-wrap gap-2 mb-4">
-                                {file.frontmatter.tags
-                                  .slice(0, 3)
-                                  .map((tag) => (
-                                    <span
-                                      key={tag}
-                                      className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-md"
-                                    >
-                                      {tag}
-                                    </span>
-                                  ))}
-                                {file.frontmatter.tags.length > 3 && (
-                                  <span className="px-2 py-1 text-gray-500 text-xs">
-                                    +{file.frontmatter.tags.length - 3}
+                          <div className="p-6">
+                            {/* Date, Reading Time, and Draft Badge */}
+                            <div className="flex items-center gap-3 text-xs text-gray-500 mb-2 flex-wrap">
+                              {file.frontmatter?.date && (
+                                <span>{formatDate(file.frontmatter.date)}</span>
+                              )}
+                              {file.frontmatter?.readingTime && (
+                                <>
+                                  {file.frontmatter.date && <span>•</span>}
+                                  <span>{file.frontmatter.readingTime}</span>
+                                </>
+                              )}
+                              {file.frontmatter?.draft === true && (
+                                <>
+                                  {(file.frontmatter.date ||
+                                    file.frontmatter.readingTime) && (
+                                    <span>•</span>
+                                  )}
+                                  <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded-full font-medium">
+                                    Draft
                                   </span>
-                                )}
-                              </div>
+                                </>
+                              )}
+                            </div>
+
+                            {/* Title */}
+                            <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-gray-700 line-clamp-2">
+                              {file.frontmatter?.title ||
+                                file.name.replace(/\.(md|markdown)$/i, "")}
+                            </h3>
+
+                            {/* Description */}
+                            {file.frontmatter?.description && (
+                              <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                                {file.frontmatter.description}
+                              </p>
                             )}
+
+                            {/* Tags */}
+                            {file.frontmatter?.tags &&
+                              file.frontmatter.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-2 mb-4">
+                                  {file.frontmatter.tags
+                                    .slice(0, 3)
+                                    .map((tag) => (
+                                      <span
+                                        key={tag}
+                                        className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-md"
+                                      >
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  {file.frontmatter.tags.length > 3 && (
+                                    <span className="px-2 py-1 text-gray-500 text-xs">
+                                      +{file.frontmatter.tags.length - 3}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                          </div>
                         </div>
-                      </Link>
+                      ) : (
+                        <Link
+                          href={`/article?file=${encodeURIComponent(
+                            file.path
+                          )}`}
+                          className="w-full text-left flex flex-col focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 rounded-lg"
+                        >
+                          {/* Hero Image */}
+                          {file.frontmatter?.heroImage && (
+                            <div className="w-full aspect-video bg-gray-100 overflow-hidden rounded-t-lg relative">
+                              <img
+                                src={file.frontmatter.heroImage}
+                                alt={file.frontmatter.title}
+                                className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display =
+                                    "none";
+                                }}
+                              />
+                            </div>
+                          )}
+
+                          <div className="p-6">
+                            {/* Date, Reading Time, and Draft Badge */}
+                            <div className="flex items-center gap-3 text-xs text-gray-500 mb-2 flex-wrap">
+                              {file.frontmatter?.date && (
+                                <span>{formatDate(file.frontmatter.date)}</span>
+                              )}
+                              {file.frontmatter?.readingTime && (
+                                <>
+                                  {file.frontmatter.date && <span>•</span>}
+                                  <span>{file.frontmatter.readingTime}</span>
+                                </>
+                              )}
+                              {file.frontmatter?.draft === true && (
+                                <>
+                                  {(file.frontmatter.date ||
+                                    file.frontmatter.readingTime) && (
+                                    <span>•</span>
+                                  )}
+                                  <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded-full font-medium">
+                                    Draft
+                                  </span>
+                                </>
+                              )}
+                            </div>
+
+                            {/* Title */}
+                            <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-gray-700 line-clamp-2">
+                              {file.frontmatter?.title ||
+                                file.name.replace(/\.(md|markdown)$/i, "")}
+                            </h3>
+
+                            {/* Description */}
+                            {file.frontmatter?.description && (
+                              <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                                {file.frontmatter.description}
+                              </p>
+                            )}
+
+                            {/* Tags */}
+                            {file.frontmatter?.tags &&
+                              file.frontmatter.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-2 mb-4">
+                                  {file.frontmatter.tags
+                                    .slice(0, 3)
+                                    .map((tag) => (
+                                      <span
+                                        key={tag}
+                                        className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-md"
+                                      >
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  {file.frontmatter.tags.length > 3 && (
+                                    <span className="px-2 py-1 text-gray-500 text-xs">
+                                      +{file.frontmatter.tags.length - 3}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                          </div>
+                        </Link>
+                      )}
                     </article>
                   ))}
                 </div>
@@ -420,6 +623,20 @@ export default function Home() {
                 onCancel={() => setDeleteFile(null)}
                 isDeleting={isDeleting}
               />
+
+              {/* Bulk Export to Contentstack Modal */}
+              {githubConfig && (
+                <BulkContentstackExportModal
+                  isOpen={isBulkExportOpen}
+                  onClose={() => {
+                    setIsBulkExportOpen(false);
+                    setIsSelectionMode(false);
+                    setSelectedFiles(new Set());
+                  }}
+                  files={getSelectedFilesForExport()}
+                  githubConfig={githubConfig}
+                />
+              )}
 
               {/* Empty State */}
               {!isLoading &&

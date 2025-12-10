@@ -39,6 +39,7 @@ import { useCloudinaryWidget } from "../hooks/useCloudinaryWidget";
 import { slugify } from "../utils/helpers";
 import DiffView from "./DiffView";
 import ImageGeneratorModal from "./ImageGeneratorModal";
+import ContentstackExportModal from "./ContentstackExportModal";
 
 // Initialize Turndown service for HTML to Markdown conversion
 const turndownService = new TurndownService({
@@ -950,8 +951,11 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isImageGeneratorOpen, setIsImageGeneratorOpen] = useState(false);
+  const [isContentstackExportOpen, setIsContentstackExportOpen] = useState(false);
+  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
   const [includeFrontmatter, setIncludeFrontmatter] = useState(false);
   const [exportRetryCount, setExportRetryCount] = useState(0);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
   const [articleMetadata, setArticleMetadata] = useState<ArticleMetadata>({
     slug: "",
     title: "",
@@ -1170,11 +1174,37 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
   };
 
   const handleExportToGoogleDocsClick = () => {
+    setIsExportDropdownOpen(false);
     setIsExportModalOpen(true);
     setExportError(null);
     setExportSuccess(null);
     setExportRetryCount(0);
   };
+
+  const handleExportToContentstackClick = () => {
+    setIsExportDropdownOpen(false);
+    setIsContentstackExportOpen(true);
+  };
+
+  // Close export dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        exportDropdownRef.current &&
+        !exportDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsExportDropdownOpen(false);
+      }
+    };
+
+    if (isExportDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isExportDropdownOpen]);
 
   const handleExportToGoogleDocs = async (retryAttempt = 0) => {
     if (!editor) return;
@@ -1992,64 +2022,118 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
                 </button>
               )}
 
-              {/* Export to Google Docs Button */}
-              <button
-                onClick={handleExportToGoogleDocsClick}
-                disabled={isExporting || !editor}
-                className={clsx(
-                  "px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2",
-                  isExporting || !editor
-                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                    : "bg-green-600 text-white hover:bg-green-700"
-                )}
-                aria-label="Export to Google Docs"
-                aria-disabled={isExporting || !editor}
-                title="Export to Google Docs"
-              >
-                {isExporting ? (
-                  <>
-                    <svg
-                      className="animate-spin h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
+              {/* Export Dropdown */}
+              <div className="relative" ref={exportDropdownRef}>
+                <button
+                  onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+                  disabled={isExporting || !editor}
+                  className={clsx(
+                    "px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2",
+                    isExporting || !editor
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : "bg-green-600 text-white hover:bg-green-700"
+                  )}
+                  aria-label="Export options"
+                  aria-disabled={isExporting || !editor}
+                  aria-expanded={isExportDropdownOpen}
+                  aria-haspopup="true"
+                  title="Export options"
+                >
+                  {isExporting ? (
+                    <>
+                      <svg
+                        className="animate-spin h-4 w-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
+                      </svg>
+                      Exporting...
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
                         stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    Exporting...
-                  </>
-                ) : (
-                  <>
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                      />
-                    </svg>
-                    Export to Docs
-                  </>
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                        />
+                      </svg>
+                      Export
+                      <svg
+                        className={clsx(
+                          "w-4 h-4 transition-transform",
+                          isExportDropdownOpen && "rotate-180"
+                        )}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </>
+                  )}
+                </button>
+
+                {/* Dropdown Menu */}
+                {isExportDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg border border-gray-200 z-50">
+                    <div className="py-1">
+                      <button
+                        onClick={handleExportToGoogleDocsClick}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3"
+                      >
+                        <svg
+                          className="w-5 h-5 text-blue-600"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M14.727 6.727H14V0H4.91c-.905 0-1.637.732-1.637 1.636v20.728c0 .904.732 1.636 1.636 1.636h14.182c.904 0 1.636-.732 1.636-1.636V6.727h-6zm-.545 10.455H7.09v-1.364h7.09v1.364zm2.727-2.727H7.091v-1.364h9.818v1.364zm0-2.728H7.091V10.364h9.818v1.363zM14.727 6h5.454l-5.454-5.455V6z" />
+                        </svg>
+                        <span>Google Docs</span>
+                      </button>
+                      <button
+                        onClick={handleExportToContentstackClick}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3"
+                      >
+                        <svg
+                          className="w-5 h-5 text-purple-600"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                        </svg>
+                        <span>Contentstack CMS</span>
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </button>
+              </div>
 
               {/* Save Button */}
               {(currentFilePath || isNewFile) && githubConfig && (
@@ -2377,6 +2461,14 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
         }}
         articleContent={editor?.getHTML()}
         articleTitle={articleMetadata.title}
+      />
+
+      {/* Contentstack Export Modal */}
+      <ContentstackExportModal
+        isOpen={isContentstackExportOpen}
+        onClose={() => setIsContentstackExportOpen(false)}
+        articleMetadata={articleMetadata}
+        articleHtml={editor?.getHTML() || ""}
       />
 
       {/* Markdown Preview Modal */}

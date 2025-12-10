@@ -84,6 +84,17 @@ function SettingsPageContent() {
     null
   );
 
+  // Contentstack config from env vars
+  const [contentstackConfig, setContentstackConfig] = useState<{
+    configured: boolean;
+    region: string | null;
+  } | null>(null);
+  const [isTestingContentstack, setIsTestingContentstack] = useState(false);
+  const [contentstackTestStatus, setContentstackTestStatus] = useState<{
+    type: "success" | "error" | null;
+    message: string;
+  }>({ type: null, message: "" });
+
   // Define load functions first
   const loadBranches = async (
     repo: string,
@@ -201,6 +212,22 @@ function SettingsPageContent() {
       }
     };
     loadGeminiConfig();
+
+    // Load Contentstack config status
+    const loadContentstackConfig = async () => {
+      try {
+        const response = await fetch("/api/contentstack/config");
+        const data = await response.json();
+        setContentstackConfig({
+          configured: data.configured || false,
+          region: data.region || null,
+        });
+      } catch (e) {
+        console.error("Failed to load Contentstack config:", e);
+        setContentstackConfig({ configured: false, region: null });
+      }
+    };
+    loadContentstackConfig();
 
     // Load GitHub token status from environment variables
     const loadGitHubConfig = async () => {
@@ -541,6 +568,53 @@ function SettingsPageContent() {
       });
     } finally {
       setIsTestingAI(false);
+    }
+  };
+
+  // Contentstack connection test handler
+  const testContentstackConnection = async () => {
+    if (!contentstackConfig?.configured) {
+      setContentstackTestStatus({
+        type: "error",
+        message: "Contentstack is not configured",
+      });
+      return;
+    }
+
+    setIsTestingContentstack(true);
+    setContentstackTestStatus({ type: null, message: "" });
+
+    try {
+      const response = await fetch("/api/contentstack/connect", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        const hasArticle = data.stack?.hasArticleContentType;
+        setContentstackTestStatus({
+          type: "success",
+          message: `Connected to Contentstack (${data.region?.toUpperCase() || "EU"}) - ${
+            data.stack?.contentTypesCount || 0
+          } content types${hasArticle ? ", article type found ✓" : ", article type NOT found ⚠️"}`,
+        });
+      } else {
+        setContentstackTestStatus({
+          type: "error",
+          message: data.error || "Failed to connect to Contentstack",
+        });
+      }
+    } catch (error: any) {
+      setContentstackTestStatus({
+        type: "error",
+        message: error.message || "Failed to test Contentstack connection",
+      });
+    } finally {
+      setIsTestingContentstack(false);
     }
   };
 
@@ -1186,6 +1260,141 @@ function SettingsPageContent() {
               <p>
                 <strong>Features:</strong> Media library browser, automatic
                 image optimization, AI image upload
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Contentstack CMS Integration */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+              Contentstack CMS
+            </h2>
+            <p className="text-gray-600">
+              Export articles directly to Contentstack CMS. Configure via
+              environment variables.
+            </p>
+          </div>
+
+          <div className="space-y-6">
+            {/* Status */}
+            {contentstackConfig === null ? (
+              <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
+                Checking configuration...
+              </div>
+            ) : contentstackConfig.configured ? (
+              <div className="p-4 bg-green-50 rounded-md border border-green-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <svg
+                        className="w-5 h-5 text-green-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-green-800">
+                        Contentstack Configured
+                      </p>
+                      <p className="text-xs text-green-700 mt-0.5">
+                        Region: {contentstackConfig.region?.toUpperCase() || "EU"}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={testContentstackConnection}
+                    disabled={isTestingContentstack}
+                    className={clsx(
+                      "px-4 py-2 text-sm font-medium bg-white text-green-800 border border-green-300 rounded-md hover:bg-green-100 hover:border-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2",
+                      isTestingContentstack && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {isTestingContentstack ? "Testing..." : "Test Connection"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-yellow-50 rounded-md border border-yellow-200">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
+                    <svg
+                      className="w-5 h-5 text-yellow-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-yellow-800">
+                      Contentstack Not Configured
+                    </p>
+                    <p className="text-xs text-yellow-700 mt-1">
+                      Add your Contentstack credentials to enable CMS export:
+                    </p>
+                    <code className="block mt-2 px-3 py-2 bg-yellow-100 rounded text-xs font-mono text-yellow-900 space-y-1">
+                      <div>CONTENTSTACK_API_KEY=your_stack_api_key</div>
+                      <div>CONTENTSTACK_MANAGEMENT_TOKEN=your_management_token</div>
+                      <div>CONTENTSTACK_REGION=eu</div>
+                    </code>
+                    <p className="text-xs text-yellow-700 mt-2">
+                      Get your credentials from the{" "}
+                      <a
+                        href="https://app.contentstack.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-yellow-800"
+                      >
+                        Contentstack Dashboard
+                      </a>{" "}
+                      under Settings → Tokens
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Test Status Messages */}
+            {contentstackTestStatus.type && (
+              <div
+                className={clsx(
+                  "p-3 rounded-md text-sm",
+                  contentstackTestStatus.type === "success"
+                    ? "bg-green-50 text-green-800 border border-green-200"
+                    : "bg-red-50 text-red-800 border border-red-200"
+                )}
+              >
+                {contentstackTestStatus.message}
+              </div>
+            )}
+
+            {/* Info */}
+            <div className="text-sm text-gray-500 space-y-2">
+              <p>
+                <strong>Content Type:</strong> article
+              </p>
+              <p>
+                <strong>Features:</strong> Create/update articles, automatic
+                taxonomy management, image upload from URL
+              </p>
+              <p>
+                <strong>Regions:</strong> EU, US, Azure NA, Azure EU
               </p>
             </div>
           </div>
