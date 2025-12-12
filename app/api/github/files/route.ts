@@ -144,9 +144,15 @@ export async function POST(request: NextRequest) {
       })
     );
 
+    // Filter out "index" articles
+    const filteredFiles = filesWithFrontmatter.filter((file) => {
+      const slug = file.frontmatter.slug || file.name.replace(/\.(md|markdown)$/i, "");
+      return slug !== "index";
+    });
+
     return NextResponse.json({
       success: true,
-      files: filesWithFrontmatter,
+      files: filteredFiles,
     });
   } catch (error: any) {
     console.error("GitHub files error:", error);

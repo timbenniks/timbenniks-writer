@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { GitHubFile } from "../types/github";
 import type { GitHubConfig } from "../types/github";
 
@@ -7,8 +7,8 @@ export function useGitHubFiles(config: GitHubConfig | null) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadFiles = async () => {
-    if (!config) return;
+  const loadFiles = useCallback(async () => {
+    if (!config || !config.repo || !config.branch) return;
 
     setIsLoading(true);
     setError(null);
@@ -20,7 +20,7 @@ export function useGitHubFiles(config: GitHubConfig | null) {
         body: JSON.stringify({
           repo: config.repo,
           branch: config.branch,
-          folder: config.folder,
+          folder: config.folder || "",
           // Token comes from environment variables on the server
         }),
       });
@@ -37,14 +37,13 @@ export function useGitHubFiles(config: GitHubConfig | null) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [config]);
 
   useEffect(() => {
-    if (config) {
+    if (config && config.repo && config.branch) {
       loadFiles();
     }
-  }, [config]);
+  }, [config, loadFiles]);
 
   return { files, isLoading, error, loadFiles, setFiles, setError };
 }
-

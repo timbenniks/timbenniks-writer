@@ -1,0 +1,608 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Tim Benniks Writer - Articles API",
+    "description": "API for fetching articles from GitHub repository in Contentstack JSON format.\n\nArticles are stored as markdown files with YAML frontmatter in a GitHub repository.\nThe API parses the markdown content and converts it to Contentstack JSON RTE format.\n\n**Note:** The article with slug \"index\" is automatically excluded from all responses.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Tim Benniks",
+      "url": "https://timbenniks.dev"
+    }
+  },
+  "servers": [
+    {
+      "url": "/api",
+      "description": "Local API server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Articles",
+      "description": "Article management endpoints"
+    }
+  ],
+  "paths": {
+    "/articles": {
+      "get": {
+        "tags": ["Articles"],
+        "summary": "List articles",
+        "description": "Returns a paginated list of articles in Contentstack JSON format.\n\nArticles are fetched from the configured GitHub repository, parsed from markdown,\nand returned with body content converted to Contentstack RTE JSON format.",
+        "operationId": "listArticles",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of articles to return (1-100)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of articles to skip for pagination",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "description": "Sort direction",
+            "schema": {
+              "type": "string",
+              "enum": ["asc", "desc"],
+              "default": "desc"
+            }
+          },
+          {
+            "name": "orderBy",
+            "in": "query",
+            "description": "Field to sort by",
+            "schema": {
+              "type": "string",
+              "enum": ["date", "title"],
+              "default": "date"
+            }
+          },
+          {
+            "name": "tags",
+            "in": "query",
+            "description": "Comma-separated list of tags to filter by (any match)",
+            "schema": {
+              "type": "string"
+            },
+            "example": "contentstack,headless-cms"
+          },
+          {
+            "name": "draft",
+            "in": "query",
+            "description": "Filter by draft status",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false", "all"],
+              "default": "false"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with list of articles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticlesListResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Repository path not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error or GitHub configuration missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Articles"],
+        "summary": "List articles (with body parameters)",
+        "description": "Alternative to GET endpoint that accepts parameters via JSON body.\nUseful for complex filtering or overriding GitHub configuration.",
+        "operationId": "listArticlesPost",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArticlesListRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response with list of articles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticlesListResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Repository path not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error or GitHub configuration missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/articles/{slug}": {
+      "get": {
+        "tags": ["Articles"],
+        "summary": "Get a single article",
+        "description": "Returns a single article by slug, filename, or file path in Contentstack JSON format.\n\nThe slug parameter can be:\n- A slug (e.g., \"my-article\")\n- A file name (e.g., \"my-article.md\")\n- A URL-encoded file path (e.g., \"content%2Farticles%2Fmy-article.md\")\n\n**Note:** Requesting the \"index\" article will return a 404 error.",
+        "operationId": "getArticle",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "description": "Article slug, filename, or URL-encoded file path",
+            "schema": {
+              "type": "string"
+            },
+            "examples": {
+              "slug": {
+                "value": "my-article",
+                "summary": "By slug"
+              },
+              "filename": {
+                "value": "my-article.md",
+                "summary": "By filename"
+              },
+              "path": {
+                "value": "content%2Farticles%2Fmy-article.md",
+                "summary": "By URL-encoded path"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with article",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Article not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error or GitHub configuration missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Article": {
+        "type": "object",
+        "required": [
+          "title",
+          "url",
+          "description",
+          "date",
+          "content",
+          "slug",
+          "source"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Article title",
+            "example": "Getting Started with Contentstack"
+          },
+          "url": {
+            "type": "string",
+            "description": "Article URL path (always prefixed with /writing/)",
+            "example": "/writing/getting-started-with-contentstack"
+          },
+          "description": {
+            "type": "string",
+            "description": "Article description/excerpt",
+            "example": "Learn how to build modern websites with Contentstack headless CMS"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Publication date in ISO 8601 format",
+            "example": "2025-01-15T10:00:00.000Z"
+          },
+          "content": {
+            "$ref": "#/components/schemas/JsonRteDocument"
+          },
+          "canonical_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Canonical URL for SEO",
+            "example": "https://example.com/original-article"
+          },
+          "reading_time": {
+            "type": "string",
+            "description": "Estimated reading time",
+            "example": "5 min read"
+          },
+          "thumbnail": {
+            "type": "string",
+            "format": "uri",
+            "description": "Hero/thumbnail image URL",
+            "example": "https://example.com/images/hero.jpg"
+          },
+          "taxonomies": {
+            "type": "array",
+            "description": "Article tags in Contentstack taxonomy format",
+            "items": {
+              "$ref": "#/components/schemas/TaxonomyRef"
+            }
+          },
+          "faqs": {
+            "type": "array",
+            "description": "FAQ items in Contentstack format",
+            "items": {
+              "$ref": "#/components/schemas/FaqItem"
+            }
+          },
+          "slug": {
+            "type": "string",
+            "description": "Article slug (URL-friendly identifier)",
+            "example": "getting-started-with-contentstack"
+          },
+          "draft": {
+            "type": "boolean",
+            "description": "Whether the article is a draft",
+            "default": false
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceInfo"
+          }
+        }
+      },
+      "JsonRteDocument": {
+        "type": "object",
+        "description": "Contentstack JSON Rich Text Editor document",
+        "required": ["type", "uid", "attrs", "children"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["doc"],
+            "description": "Document type (always \"doc\" for root)"
+          },
+          "uid": {
+            "type": "string",
+            "description": "Unique identifier for the document",
+            "example": "a1b2c3d4e5f6g7h8i9j0k1l2"
+          },
+          "attrs": {
+            "type": "object",
+            "description": "Document attributes",
+            "additionalProperties": true
+          },
+          "children": {
+            "type": "array",
+            "description": "Child nodes (paragraphs, headings, lists, etc.)",
+            "items": {
+              "$ref": "#/components/schemas/JsonRteNode"
+            }
+          },
+          "_version": {
+            "type": "integer",
+            "description": "Document version",
+            "default": 1
+          }
+        }
+      },
+      "JsonRteNode": {
+        "type": "object",
+        "description": "JSON RTE node (paragraph, heading, list, etc.)",
+        "required": ["type", "uid", "attrs", "children"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Node type (p, h1-h6, ul, ol, li, blockquote, code, img, a, etc.)",
+            "example": "p"
+          },
+          "uid": {
+            "type": "string",
+            "description": "Unique identifier for the node"
+          },
+          "attrs": {
+            "type": "object",
+            "description": "Node attributes (language for code, url for links/images, etc.)",
+            "additionalProperties": true
+          },
+          "children": {
+            "type": "array",
+            "description": "Child nodes or text content",
+            "items": {
+              "oneOf": [
+                { "$ref": "#/components/schemas/JsonRteNode" },
+                { "$ref": "#/components/schemas/JsonRteText" }
+              ]
+            }
+          }
+        }
+      },
+      "JsonRteText": {
+        "type": "object",
+        "description": "Text content with optional formatting marks",
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text content"
+          },
+          "bold": {
+            "type": "boolean",
+            "description": "Bold formatting"
+          },
+          "italic": {
+            "type": "boolean",
+            "description": "Italic formatting"
+          },
+          "underline": {
+            "type": "boolean",
+            "description": "Underline formatting"
+          },
+          "strikethrough": {
+            "type": "boolean",
+            "description": "Strikethrough formatting"
+          },
+          "code": {
+            "type": "boolean",
+            "description": "Inline code formatting"
+          }
+        }
+      },
+      "TaxonomyRef": {
+        "type": "object",
+        "description": "Reference to a taxonomy term",
+        "required": ["taxonomy_uid", "term_uid"],
+        "properties": {
+          "taxonomy_uid": {
+            "type": "string",
+            "description": "Taxonomy identifier",
+            "example": "content_tags"
+          },
+          "term_uid": {
+            "type": "string",
+            "description": "Term identifier (slug format)",
+            "example": "contentstack"
+          }
+        }
+      },
+      "FaqItem": {
+        "type": "object",
+        "description": "FAQ item in Contentstack format",
+        "required": ["qa"],
+        "properties": {
+          "qa": {
+            "type": "object",
+            "required": ["question", "answer"],
+            "properties": {
+              "question": {
+                "type": "string",
+                "description": "FAQ question",
+                "example": "What is Contentstack?"
+              },
+              "answer": {
+                "type": "string",
+                "description": "FAQ answer",
+                "example": "Contentstack is a headless CMS platform."
+              }
+            }
+          }
+        }
+      },
+      "SourceInfo": {
+        "type": "object",
+        "description": "Source file information from GitHub",
+        "required": ["path", "sha"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "File path in the repository",
+            "example": "content/articles/getting-started.md"
+          },
+          "sha": {
+            "type": "string",
+            "description": "Git SHA hash of the file",
+            "example": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"
+          }
+        }
+      },
+      "ArticlesListRequest": {
+        "type": "object",
+        "description": "Request body for POST /api/articles",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 10,
+            "description": "Maximum number of articles to return"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "description": "Number of articles to skip for pagination"
+          },
+          "order": {
+            "type": "string",
+            "enum": ["asc", "desc"],
+            "default": "desc",
+            "description": "Sort direction"
+          },
+          "orderBy": {
+            "type": "string",
+            "enum": ["date", "title"],
+            "default": "date",
+            "description": "Field to sort by"
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Tags to filter by (any match)",
+            "example": ["contentstack", "headless-cms"]
+          },
+          "draft": {
+            "type": "string",
+            "enum": ["true", "false", "all"],
+            "default": "false",
+            "description": "Filter by draft status"
+          },
+          "repo": {
+            "type": "string",
+            "description": "Override GITHUB_REPO environment variable",
+            "example": "owner/repo"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Override GITHUB_BRANCH environment variable",
+            "example": "main"
+          },
+          "folder": {
+            "type": "string",
+            "description": "Override GITHUB_FOLDER environment variable",
+            "example": "content/articles"
+          }
+        }
+      },
+      "ArticlesListResponse": {
+        "type": "object",
+        "required": ["success", "articles", "total", "limit", "offset"],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Whether the request was successful",
+            "example": true
+          },
+          "articles": {
+            "type": "array",
+            "description": "List of articles",
+            "items": {
+              "$ref": "#/components/schemas/Article"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total number of matching articles (before pagination)",
+            "example": 42
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum articles per page",
+            "example": 10
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Current pagination offset",
+            "example": 0
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message (only present on failure)"
+          }
+        }
+      },
+      "ArticleResponse": {
+        "type": "object",
+        "required": ["success"],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Whether the request was successful",
+            "example": true
+          },
+          "article": {
+            "$ref": "#/components/schemas/Article"
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message (only present on failure)"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["success", "error"],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message",
+            "example": "Article not found"
+          }
+        }
+      }
+    }
+  }
+}

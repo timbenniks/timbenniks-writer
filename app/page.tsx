@@ -19,7 +19,7 @@ import BulkContentstackExportModal from "./components/BulkContentstackExportModa
 
 export default function Home() {
   const router = useRouter();
-  const { config: githubConfig } = useGitHubConfig();
+  const { config: githubConfig, loading: configLoading, error: configError } = useGitHubConfig();
   const { files, isLoading, error, loadFiles, setFiles, setError } =
     useGitHubFiles(githubConfig);
   const [searchQuery, setSearchQuery] = useState("");
@@ -252,20 +252,26 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
-        {!githubConfig ? (
+        {configLoading ? (
+          /* Loading Config State */
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            <p className="mt-4 text-gray-600">Loading configuration...</p>
+          </div>
+        ) : !githubConfig ? (
           /* No Config State */
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
             <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-              No GitHub Configuration
+              GitHub Not Configured
             </h2>
             <p className="text-gray-600 mb-6">
-              Please configure your GitHub repository to view and edit articles.
+              {configError || "Please add your GitHub configuration to .env.local to view and edit articles."}
             </p>
             <button
               onClick={() => router.push("/settings")}
               className={BUTTON_PRIMARY_CLASSES}
             >
-              Go to Settings
+              View Settings
             </button>
           </div>
         ) : files.length > 0 ? (
