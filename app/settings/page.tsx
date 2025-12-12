@@ -7,6 +7,9 @@ import {
   BUTTON_PRIMARY_CLASSES,
   BUTTON_SECONDARY_CLASSES,
 } from "../utils/constants";
+import PlaylistManager from "../components/PlaylistManager";
+import { useGitHubConfig } from "../hooks/useGitHubConfig";
+import { usePlaylists } from "../hooks/usePlaylists";
 
 interface GitHubEnvConfig {
   repo: string;
@@ -85,6 +88,29 @@ function SettingsPageContent() {
     type: "success" | "error" | null;
     message: string;
   }>({ type: null, message: "" });
+
+  // YouTube config from env vars
+  const [youtubeConfig, setYoutubeConfig] = useState<{
+    configured: boolean;
+    keyPreview: string | null;
+  } | null>(null);
+  const [isTestingYoutube, setIsTestingYoutube] = useState(false);
+  const [youtubeTestStatus, setYoutubeTestStatus] = useState<{
+    type: "success" | "error" | null;
+    message: string;
+  }>({ type: null, message: "" });
+
+  // Playlists management
+  const { config: ghConfig } = useGitHubConfig();
+  const {
+    playlists,
+    isLoading: playlistsLoading,
+    isSaving: playlistsSaving,
+    error: playlistsError,
+    addPlaylist,
+    updatePlaylist,
+    removePlaylist,
+  } = usePlaylists(ghConfig);
 
   // Load all configs on mount
   useEffect(() => {
@@ -174,6 +200,22 @@ function SettingsPageContent() {
       }
     };
     loadContentstackConfig();
+
+    // Load YouTube config status
+    const loadYoutubeConfig = async () => {
+      try {
+        const response = await fetch("/api/youtube/config");
+        const data = await response.json();
+        setYoutubeConfig({
+          configured: data.configured || false,
+          keyPreview: data.keyPreview || null,
+        });
+      } catch (e) {
+        console.error("Failed to load YouTube config:", e);
+        setYoutubeConfig({ configured: false, keyPreview: null });
+      }
+    };
+    loadYoutubeConfig();
   }, []);
 
   // Check Google connection status
@@ -458,23 +500,81 @@ function SettingsPageContent() {
     }
   };
 
+  // YouTube connection test handler
+  const testYoutubeConnection = async () => {
+    if (!youtubeConfig?.configured) {
+      setYoutubeTestStatus({
+        type: "error",
+        message: "YouTube API is not configured",
+      });
+      return;
+    }
+
+    setIsTestingYoutube(true);
+    setYoutubeTestStatus({ type: null, message: "" });
+
+    try {
+      // Try to fetch a known playlist to test the connection
+      const response = await fetch("/api/youtube/playlist-videos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playlistId: "PLQVvvaa0QuDfKTOs3Keq_kaG2P55YRn5v", // A public playlist for testing
+          includeDurations: false,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setYoutubeTestStatus({
+          type: "success",
+          message: "YouTube API connection successful!",
+        });
+      } else {
+        setYoutubeTestStatus({
+          type: "error",
+          message: data.error || "Failed to connect to YouTube API",
+        });
+      }
+    } catch (error: any) {
+      setYoutubeTestStatus({
+        type: "error",
+        message: error.message || "Failed to test YouTube connection",
+      });
+    } finally {
+      setIsTestingYoutube(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+      {/* Header - using simpler header for settings since it's a different layout */}
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-            <p className="text-sm text-gray-600 mt-1">
-              View your configuration status (all settings from environment variables)
-            </p>
+          <div className="flex items-center gap-6">
+            {/* Navigation links */}
+            <nav className="flex items-center gap-1">
+              <a
+                href="/"
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors"
+              >
+                Articles
+              </a>
+              <a
+                href="/videos"
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors"
+              >
+                Videos
+              </a>
+              <span className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-900 rounded-md">
+                Settings
+              </span>
+            </nav>
           </div>
-          <button
-            onClick={() => router.push("/")}
-            className={BUTTON_SECONDARY_CLASSES}
-          >
-            Back to Articles
-          </button>
+          <p className="text-sm text-gray-600">
+            Configuration status (via environment variables)
+          </p>
         </div>
       </header>
 
@@ -1097,6 +1197,160 @@ function SettingsPageContent() {
               </p>
             </div>
           </div>
+        </div>
+
+        {/* YouTube API Configuration */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+              YouTube API
+            </h2>
+            <p className="text-gray-600">
+              Import videos from YouTube playlists. Configure via environment
+              variables.
+            </p>
+          </div>
+
+          <div className="space-y-6">
+            {/* Status */}
+            {youtubeConfig === null ? (
+              <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
+                Checking configuration...
+              </div>
+            ) : youtubeConfig.configured ? (
+              <div className="p-4 bg-green-50 rounded-md border border-green-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <svg
+                        className="w-5 h-5 text-green-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-green-800">
+                        YouTube API Configured
+                      </p>
+                      {youtubeConfig.keyPreview && (
+                        <p className="text-xs text-green-700 mt-0.5 font-mono">
+                          API Key: {youtubeConfig.keyPreview}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={testYoutubeConnection}
+                    disabled={isTestingYoutube}
+                    className={clsx(
+                      "px-4 py-2 text-sm font-medium bg-white text-green-800 border border-green-300 rounded-md hover:bg-green-100 hover:border-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2",
+                      isTestingYoutube && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {isTestingYoutube ? "Testing..." : "Test Connection"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-yellow-50 rounded-md border border-yellow-200">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
+                    <svg
+                      className="w-5 h-5 text-yellow-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-yellow-800">
+                      YouTube API Not Configured
+                    </p>
+                    <p className="text-xs text-yellow-700 mt-1">
+                      Add your YouTube API key to enable video import:
+                    </p>
+                    <code className="block mt-2 px-3 py-2 bg-yellow-100 rounded text-xs font-mono text-yellow-900">
+                      YOUTUBE_KEY=your_api_key_here
+                    </code>
+                    <p className="text-xs text-yellow-700 mt-2">
+                      Get your API key from the{" "}
+                      <a
+                        href="https://console.cloud.google.com/apis/credentials"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-yellow-800"
+                      >
+                        Google Cloud Console
+                      </a>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Test Status Messages */}
+            {youtubeTestStatus.type && (
+              <div
+                className={clsx(
+                  "p-3 rounded-md text-sm",
+                  youtubeTestStatus.type === "success"
+                    ? "bg-green-50 text-green-800 border border-green-200"
+                    : "bg-red-50 text-red-800 border border-red-200"
+                )}
+              >
+                {youtubeTestStatus.message}
+              </div>
+            )}
+
+            {/* Info */}
+            <div className="text-sm text-gray-500 space-y-2">
+              <p>
+                <strong>Features:</strong> Import videos from playlists, fetch
+                transcripts, update metadata
+              </p>
+              <p>
+                <strong>API:</strong> YouTube Data API v3 (read-only)
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Playlists Configuration */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+              YouTube Playlists
+            </h2>
+            <p className="text-gray-600">
+              Manage which YouTube playlists can be imported. Each playlist maps
+              to a folder in your repository.
+            </p>
+          </div>
+
+          <PlaylistManager
+            playlists={playlists}
+            onAdd={addPlaylist}
+            onUpdate={updatePlaylist}
+            onRemove={removePlaylist}
+            isLoading={playlistsLoading}
+            isSaving={playlistsSaving}
+            error={playlistsError}
+          />
         </div>
       </main>
     </div>

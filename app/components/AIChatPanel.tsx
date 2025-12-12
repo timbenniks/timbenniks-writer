@@ -716,11 +716,6 @@ export default function AIChatPanel({
                                   "❌ YAML parsing error:",
                                   parseError.message
                                 );
-                                console.log(
-                                  "Raw content preview:",
-                                  rawContent.substring(0, 2000)
-                                );
-
                                 // Try to fix common YAML issues
                                 if (hasFrontmatterDelimiters) {
                                   const frontmatterMatch = rawContent.match(
@@ -798,25 +793,11 @@ export default function AIChatPanel({
                                   frontmatterData = parsed.data;
                                   content = parsed.content.trim(); // Content without frontmatter
 
-                                  console.log(
-                                    "✅ Parsed frontmatter:",
-                                    frontmatterData
-                                  );
-                                  console.log(
-                                    "✅ Extracted content length:",
-                                    content.length
-                                  );
-
                                   // Update metadata if callback provided
                                   if (onMetadataUpdate) {
                                     const metadata =
                                       mapFrontmatterToMetadata(frontmatterData);
-                                    console.log(
-                                      "✅ Mapped metadata:",
-                                      metadata
-                                    );
                                     onMetadataUpdate(metadata);
-                                    console.log("✅ Called onMetadataUpdate");
                                   } else {
                                     console.warn(
                                       "❌ onMetadataUpdate callback not provided"
@@ -1090,11 +1071,6 @@ export default function AIChatPanel({
                             "❌ YAML parsing error:",
                             parseError.message
                           );
-                          console.log(
-                            "Raw content preview:",
-                            rawContent.substring(0, 2000)
-                          );
-
                           // Try to fix common YAML issues
                           if (hasFrontmatterDelimiters) {
                             const frontmatterMatch = rawContent.match(
@@ -1163,22 +1139,11 @@ export default function AIChatPanel({
                             frontmatterData = parsed.data;
                             content = parsed.content.trim(); // Content without frontmatter
 
-                            console.log(
-                              "✅ Parsed frontmatter:",
-                              frontmatterData
-                            );
-                            console.log(
-                              "✅ Extracted content length:",
-                              content.length
-                            );
-
                             // Update metadata if callback provided
                             if (onMetadataUpdate) {
                               const metadata =
                                 mapFrontmatterToMetadata(frontmatterData);
-                              console.log("✅ Mapped metadata:", metadata);
                               onMetadataUpdate(metadata);
-                              console.log("✅ Called onMetadataUpdate");
                             } else {
                               console.warn(
                                 "❌ onMetadataUpdate callback not provided"

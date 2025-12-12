@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import clsx from "clsx";
@@ -16,6 +16,7 @@ import {
 import { deleteGitHubFile } from "./utils/api";
 import DeleteConfirmModal from "./components/ui/DeleteConfirmModal";
 import BulkContentstackExportModal from "./components/BulkContentstackExportModal";
+import AppHeader from "./components/AppHeader";
 
 export default function Home() {
   const router = useRouter();
@@ -157,98 +158,91 @@ export default function Home() {
     return filteredFiles.filter((f) => selectedFiles.has(f.sha));
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Articles</h1>
-            <p className="text-sm text-gray-600 mt-1">
-              {githubConfig
-                ? `Connected to ${githubConfig.repo}${
-                    githubConfig.folder ? ` / ${githubConfig.folder}` : ""
-                  }`
-                : "Connect to GitHub to view articles"}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            {githubConfig && (
-              <>
-                {isSelectionMode ? (
-                  <>
-                    <span className="text-sm text-gray-600">
-                      {selectedFiles.size} selected
-                    </span>
-                    <button
-                      onClick={toggleSelectAll}
-                      className={BUTTON_SECONDARY_CLASSES}
-                    >
-                      {selectedFiles.size === filteredFiles.length
-                        ? "Deselect All"
-                        : "Select All"}
-                    </button>
-                    <button
-                      onClick={() => setIsBulkExportOpen(true)}
-                      disabled={selectedFiles.size === 0}
-                      className={clsx(
-                        "px-4 py-2 text-sm font-medium rounded-md transition-colors",
-                        selectedFiles.size === 0
-                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                          : "bg-purple-600 text-white hover:bg-purple-700"
-                      )}
-                    >
-                      Export to Contentstack
-                    </button>
-                    <button
-                      onClick={exitSelectionMode}
-                      className={BUTTON_SECONDARY_CLASSES}
-                    >
-                      Cancel
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => setIsSelectionMode(true)}
-                      className={BUTTON_SECONDARY_CLASSES}
-                      title="Select articles for bulk export"
-                    >
-                      Select
-                    </button>
-                    <button
-                      onClick={loadFiles}
-                      disabled={isLoading}
-                      className={clsx(
-                        "px-4 py-2 text-sm font-medium rounded-md transition-colors",
-                        isLoading
-                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                          : "bg-gray-900 text-white hover:bg-gray-800"
-                      )}
-                    >
-                      {isLoading ? "Loading..." : "Refresh"}
-                    </button>
-                    <button
-                      onClick={() => router.push("/settings")}
-                      className={BUTTON_SECONDARY_CLASSES}
-                    >
-                      Settings
-                    </button>
-                  </>
-                )}
-              </>
-            )}
-            {!isSelectionMode && (
+  // Header actions
+  const headerActions = (
+    <>
+      {githubConfig && (
+        <>
+          {isSelectionMode ? (
+            <>
+              <span className="text-sm text-gray-600">
+                {selectedFiles.size} selected
+              </span>
               <button
-                onClick={() => router.push("/article?new=true")}
+                onClick={toggleSelectAll}
                 className={BUTTON_SECONDARY_CLASSES}
               >
-                New Article
+                {selectedFiles.size === filteredFiles.length
+                  ? "Deselect All"
+                  : "Select All"}
               </button>
-            )}
-          </div>
-        </div>
-      </header>
+              <button
+                onClick={() => setIsBulkExportOpen(true)}
+                disabled={selectedFiles.size === 0}
+                className={clsx(
+                  "px-4 py-2 text-sm font-medium rounded-md transition-colors",
+                  selectedFiles.size === 0
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-purple-600 text-white hover:bg-purple-700"
+                )}
+              >
+                Export to Contentstack
+              </button>
+              <button
+                onClick={exitSelectionMode}
+                className={BUTTON_SECONDARY_CLASSES}
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setIsSelectionMode(true)}
+                className={BUTTON_SECONDARY_CLASSES}
+                title="Select articles for bulk export"
+              >
+                Select
+              </button>
+              <button
+                onClick={loadFiles}
+                disabled={isLoading}
+                className={clsx(
+                  "px-4 py-2 text-sm font-medium rounded-md transition-colors",
+                  isLoading
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-gray-900 text-white hover:bg-gray-800"
+                )}
+              >
+                {isLoading ? "Loading..." : "Refresh"}
+              </button>
+            </>
+          )}
+        </>
+      )}
+      {!isSelectionMode && (
+        <button
+          onClick={() => router.push("/article?new=true")}
+          className={BUTTON_SECONDARY_CLASSES}
+        >
+          New Article
+        </button>
+      )}
+    </>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <AppHeader
+        actions={headerActions}
+        subtitle={
+          githubConfig
+            ? `Connected to ${githubConfig.repo}${
+                githubConfig.folder ? ` / ${githubConfig.folder}` : ""
+              }`
+            : "Connect to GitHub to view articles"
+        }
+      />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">

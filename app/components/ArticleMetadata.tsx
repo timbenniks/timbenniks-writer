@@ -41,7 +41,6 @@ export default function ArticleMetadataPanel({
 
   // Sync local metadata when prop changes (e.g., when title or heroImage is updated from main editor)
   useEffect(() => {
-    console.log("ArticleMetadataPanel: metadata prop changed", metadata);
     const prevSlug = localMetadata.slug;
     setLocalMetadata(metadata);
     
