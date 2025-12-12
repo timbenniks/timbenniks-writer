@@ -32,10 +32,12 @@ export default function ImageGeneratorModal({
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSuggestingPrompt, setIsSuggestingPrompt] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentImage, setCurrentImage] = useState<GeneratedImage | null>(null);
   const [conversation, setConversation] = useState<ConversationEntry[]>([]);
   const [geminiConfigured, setGeminiConfigured] = useState<boolean | null>(null);
+  const [promptSuggested, setPromptSuggested] = useState(false);
 
   // Check if Gemini is configured
   useEffect(() => {
@@ -61,8 +63,51 @@ export default function ImageGeneratorModal({
       setError(null);
       setCurrentImage(null);
       setConversation([]);
+      setPromptSuggested(false);
     }
   }, [isOpen]);
+
+  // Auto-generate prompt suggestion when modal opens with article content
+  useEffect(() => {
+    const generatePromptSuggestion = async () => {
+      if (!isOpen || !articleContent || promptSuggested || isSuggestingPrompt) return;
+      
+      // Only suggest if there's meaningful content
+      const textContent = articleContent
+        .replace(/<[^>]*>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      
+      if (textContent.length < 100) return;
+      
+      setIsSuggestingPrompt(true);
+      setPromptSuggested(true);
+      
+      try {
+        const response = await fetch("/api/openai/generate-image-prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            articleContent: textContent.substring(0, 3000),
+            articleTitle,
+          }),
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.prompt) {
+          setPrompt(data.prompt);
+        }
+      } catch (err) {
+        console.error("Failed to generate prompt suggestion:", err);
+        // Silently fail - user can still type their own prompt
+      } finally {
+        setIsSuggestingPrompt(false);
+      }
+    };
+    
+    generatePromptSuggestion();
+  }, [isOpen, articleContent, articleTitle, promptSuggested, isSuggestingPrompt]);
 
   // Get article context for the prompt
   const getArticleContext = () => {
@@ -283,29 +328,35 @@ export default function ImageGeneratorModal({
                     <div className="h-full flex items-center justify-center">
                       <div className="text-center max-w-md">
                         <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-purple-100 to-blue-100 rounded-2xl flex items-center justify-center">
-                          <svg
-                            className="w-10 h-10 text-purple-600"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={1.5}
-                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                            />
-                          </svg>
+                          {isSuggestingPrompt ? (
+                            <div className="w-10 h-10 border-3 border-purple-200 border-t-purple-600 rounded-full animate-spin" />
+                          ) : (
+                            <svg
+                              className="w-10 h-10 text-purple-600"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={1.5}
+                                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                              />
+                            </svg>
+                          )}
                         </div>
                         <h3 className="text-lg font-medium text-gray-900 mb-2">
-                          Describe your cover image
+                          {isSuggestingPrompt
+                            ? "Analyzing your article..."
+                            : "Describe your cover image"}
                         </h3>
                         <p className="text-gray-500 text-sm">
-                          The AI will use your article content as context to
-                          generate a relevant, professional cover image in 16:9
-                          format.
+                          {isSuggestingPrompt
+                            ? "AI is generating a creative image concept based on your article content."
+                            : "The AI will use your article content as context to generate a relevant, professional cover image in 16:9 format."}
                         </p>
-                        {articleTitle && (
+                        {articleTitle && !isSuggestingPrompt && (
                           <p className="mt-4 text-xs text-gray-400">
                             Article: &quot;{articleTitle}&quot;
                           </p>
@@ -426,27 +477,31 @@ export default function ImageGeneratorModal({
                         onChange={(e) => setPrompt(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder={
-                          currentImage
+                          isSuggestingPrompt
+                            ? "✨ Generating a prompt suggestion based on your article..."
+                            : currentImage
                             ? "Give feedback to generate a new version..."
                             : "Describe the cover image you want..."
                         }
                         className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                         rows={2}
-                        disabled={isGenerating || isUploading}
+                        disabled={isGenerating || isUploading || isSuggestingPrompt}
                       />
                     </div>
                     <button
                       onClick={handleGenerate}
-                      disabled={!prompt.trim() || isGenerating || isUploading}
+                      disabled={!prompt.trim() || isGenerating || isUploading || isSuggestingPrompt}
                       className={clsx(
                         "px-4 py-3 rounded-xl font-medium transition-colors flex items-center gap-2",
-                        !prompt.trim() || isGenerating || isUploading
+                        !prompt.trim() || isGenerating || isUploading || isSuggestingPrompt
                           ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                           : "bg-purple-600 text-white hover:bg-purple-700"
                       )}
                     >
                       {isGenerating ? (
                         <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : isSuggestingPrompt ? (
+                        <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin" />
                       ) : (
                         <svg
                           className="w-5 h-5"

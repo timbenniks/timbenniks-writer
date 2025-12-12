@@ -28,6 +28,10 @@ import TurndownService from "turndown";
 import ArticleMetadataPanel, { type ArticleMetadata } from "./ArticleMetadata";
 import HistoryPanel from "./HistoryPanel";
 import AIWritingBar from "./AIWritingBar";
+import PasteMarkdownModal, {
+  isMarkdownWithFrontmatter,
+  parseMarkdownWithFrontmatter,
+} from "./PasteMarkdownModal";
 import type { GitHubConfig } from "../types/github";
 import {
   markdownToHtml,
@@ -954,6 +958,12 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
   const [isContentstackExportOpen, setIsContentstackExportOpen] = useState(false);
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
   const [includeFrontmatter, setIncludeFrontmatter] = useState(false);
+  const [isPasteMarkdownOpen, setIsPasteMarkdownOpen] = useState(false);
+  
+  // Ref to access the parsed markdown handler from within useEditor's handlePaste
+  const handleParsedMarkdownRef = useRef<
+    ((htmlContent: string, metadata: Partial<ArticleMetadata>) => void) | null
+  >(null);
   const [exportRetryCount, setExportRetryCount] = useState(0);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
   const [articleMetadata, setArticleMetadata] = useState<ArticleMetadata>({
@@ -993,6 +1003,12 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
     // Open the metadata panel to show generated values
     setIsMetadataOpen(true);
   };
+
+  // Ref to store latest articleMetadata for use in callbacks
+  const articleMetadataRef = useRef(articleMetadata);
+  useEffect(() => {
+    articleMetadataRef.current = articleMetadata;
+  }, [articleMetadata]);
 
   const updateTitle = (title: string) => {
     // Auto-generate slug from title only for new files
@@ -1591,10 +1607,68 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
           }
         }
 
+        // Smart paste detection for markdown with frontmatter
+        // Only trigger when editor is empty (new article) and content looks like markdown
+        if (event.clipboardData) {
+          const pastedText = event.clipboardData.getData("text/plain");
+          
+          // Check if content looks like a markdown file with frontmatter
+          // and the editor is essentially empty (new file)
+          const editorText = state.doc.textContent.trim();
+          const isEditorEmpty = editorText.length === 0;
+          
+          if (isEditorEmpty && pastedText && isMarkdownWithFrontmatter(pastedText)) {
+            event.preventDefault();
+            
+            // Parse the markdown asynchronously and update via ref
+            parseMarkdownWithFrontmatter(pastedText).then((result) => {
+              if (result && handleParsedMarkdownRef.current) {
+                handleParsedMarkdownRef.current(result.htmlContent, result.metadata);
+              }
+            }).catch((err) => {
+              console.error("Failed to parse pasted markdown:", err);
+            });
+            
+            return true;
+          }
+        }
+
         return false; // Let default paste handler handle it
       },
     },
   });
+
+  // Handle parsed markdown from paste modal or smart paste detection
+  const handleParsedMarkdown = useCallback(
+    (htmlContent: string, metadata: Partial<ArticleMetadata>) => {
+      // Set the editor content
+      if (editor) {
+        editor.commands.setContent(htmlContent);
+      }
+
+      // Update metadata using ref to get latest value
+      const currentMetadata = articleMetadataRef.current;
+      const updated: ArticleMetadata = {
+        ...currentMetadata,
+        ...metadata,
+        // Always use today's date when pasting markdown
+        date: new Date().toISOString().split("T")[0],
+        // Always set draft to true when pasting markdown
+        draft: true,
+      };
+      setArticleMetadata(updated);
+      onMetadataChange?.(updated);
+
+      // Open metadata panel to show imported values
+      setIsMetadataOpen(true);
+    },
+    [editor, onMetadataChange]
+  );
+
+  // Keep the ref updated with the latest handler
+  useEffect(() => {
+    handleParsedMarkdownRef.current = handleParsedMarkdown;
+  }, [handleParsedMarkdown]);
 
   // Keyboard shortcut for save (Cmd/Ctrl+S)
   useEffect(() => {
@@ -2447,8 +2521,16 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
             updateTitle(title);
           }
         }}
+        onPasteMarkdown={() => setIsPasteMarkdownOpen(true)}
         scrollContainerRef={scrollContainerRef}
         disabled={isLoadingFile || isSaving}
+      />
+
+      {/* Paste Markdown Modal */}
+      <PasteMarkdownModal
+        isOpen={isPasteMarkdownOpen}
+        onClose={() => setIsPasteMarkdownOpen(false)}
+        onParsed={handleParsedMarkdown}
       />
 
       {/* Image Generator Modal */}
