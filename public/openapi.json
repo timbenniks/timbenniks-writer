@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Tim Benniks Writer - Articles API",
-    "description": "API for fetching articles from GitHub repository in Contentstack JSON format.\n\nArticles are stored as markdown files with YAML frontmatter in a GitHub repository.\nThe API parses the markdown content and converts it to Contentstack JSON RTE format.\n\n**Note:** The article with slug \"index\" is automatically excluded from all responses.",
+    "title": "Tim Benniks Writer - Content API",
+    "description": "API for fetching articles and videos from GitHub repository in Contentstack JSON format.\n\nArticles and videos are stored as markdown files with YAML frontmatter in a GitHub repository.\nArticles are parsed and converted to Contentstack JSON RTE format.\nVideos are returned in Contentstack video format.\n\n**Note:** The article with slug \"index\" is automatically excluded from all responses.",
     "version": "1.0.0",
     "contact": {
       "name": "Tim Benniks",
@@ -19,6 +19,10 @@
     {
       "name": "Articles",
       "description": "Article management endpoints"
+    },
+    {
+      "name": "Videos",
+      "description": "Video management endpoints"
     }
   ],
   "paths": {
@@ -216,6 +220,220 @@
           },
           "404": {
             "description": "Article not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error or GitHub configuration missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/videos": {
+      "get": {
+        "tags": ["Videos"],
+        "summary": "List videos",
+        "description": "Returns a paginated list of videos in Contentstack JSON format.\n\nVideos are fetched from the configured GitHub repository, parsed from markdown,\nand returned in Contentstack video format.",
+        "operationId": "listVideos",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of videos to return (1-100)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of videos to skip for pagination",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "description": "Sort direction",
+            "schema": {
+              "type": "string",
+              "enum": ["asc", "desc"],
+              "default": "desc"
+            }
+          },
+          {
+            "name": "orderBy",
+            "in": "query",
+            "description": "Field to sort by",
+            "schema": {
+              "type": "string",
+              "enum": ["date", "title", "position"],
+              "default": "date"
+            }
+          },
+          {
+            "name": "tags",
+            "in": "query",
+            "description": "Comma-separated list of tags to filter by (any match)",
+            "schema": {
+              "type": "string"
+            },
+            "example": "contentstack,youtube"
+          },
+          {
+            "name": "playlist",
+            "in": "query",
+            "description": "Filter by playlist name",
+            "schema": {
+              "type": "string"
+            },
+            "example": "tim"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with list of videos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideosListResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Repository path not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error or GitHub configuration missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Videos"],
+        "summary": "List videos (with body parameters)",
+        "description": "Alternative to GET endpoint that accepts parameters via JSON body.\nUseful for complex filtering or overriding GitHub configuration.",
+        "operationId": "listVideosPost",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideosListRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response with list of videos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideosListResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Repository path not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error or GitHub configuration missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/videos/{slug}": {
+      "get": {
+        "tags": ["Videos"],
+        "summary": "Get a single video",
+        "description": "Returns a single video by slug (videoId), filename, or file path in Contentstack JSON format.\n\nThe slug parameter can be:\n- A videoId (e.g., \"dQw4w9WgXcQ\")\n- A file name (e.g., \"001-dQw4w9WgXcQ.md\")\n- A URL-encoded file path (e.g., \"content%2F3.videos%2Ftim%2F001-dQw4w9WgXcQ.md\")",
+        "operationId": "getVideo",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "description": "Video slug (videoId), filename, or URL-encoded file path",
+            "schema": {
+              "type": "string"
+            },
+            "examples": {
+              "videoId": {
+                "value": "dQw4w9WgXcQ",
+                "summary": "By videoId"
+              },
+              "filename": {
+                "value": "001-dQw4w9WgXcQ.md",
+                "summary": "By filename"
+              },
+              "path": {
+                "value": "content%2F3.videos%2Ftim%2F001-dQw4w9WgXcQ.md",
+                "summary": "By URL-encoded path"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with video",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Video not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -600,6 +818,195 @@
             "type": "string",
             "description": "Error message",
             "example": "Article not found"
+          }
+        }
+      },
+      "Video": {
+        "type": "object",
+        "required": [
+          "title",
+          "video_id",
+          "description",
+          "date",
+          "position",
+          "playlist",
+          "slug",
+          "source"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Video title",
+            "example": "Getting Started with Contentstack"
+          },
+          "video_id": {
+            "type": "string",
+            "description": "YouTube video ID",
+            "example": "dQw4w9WgXcQ"
+          },
+          "description": {
+            "type": "string",
+            "description": "Video description",
+            "example": "Learn how to build modern websites with Contentstack headless CMS"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Publication date in ISO 8601 format",
+            "example": "2025-01-15T10:00:00.000Z"
+          },
+          "image_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Video thumbnail/image URL",
+            "example": "https://example.com/images/video-thumb.jpg"
+          },
+          "transcript": {
+            "type": "string",
+            "description": "Video transcript text",
+            "example": "Welcome to this video about Contentstack..."
+          },
+          "position": {
+            "type": "string",
+            "description": "Position/order in playlist (3-digit string)",
+            "example": "001"
+          },
+          "playlist": {
+            "type": "string",
+            "description": "Playlist name/folder",
+            "example": "tim"
+          },
+          "duration": {
+            "type": "string",
+            "description": "Video duration",
+            "example": "10:30"
+          },
+          "taxonomies": {
+            "type": "array",
+            "description": "Video tags in Contentstack taxonomy format",
+            "items": {
+              "$ref": "#/components/schemas/TaxonomyRef"
+            }
+          },
+          "slug": {
+            "type": "string",
+            "description": "Video slug (typically the videoId)",
+            "example": "dQw4w9WgXcQ"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceInfo"
+          }
+        }
+      },
+      "VideosListRequest": {
+        "type": "object",
+        "description": "Request body for POST /api/videos",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 10,
+            "description": "Maximum number of videos to return"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "description": "Number of videos to skip for pagination"
+          },
+          "order": {
+            "type": "string",
+            "enum": ["asc", "desc"],
+            "default": "desc",
+            "description": "Sort direction"
+          },
+          "orderBy": {
+            "type": "string",
+            "enum": ["date", "title", "position"],
+            "default": "date",
+            "description": "Field to sort by"
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Tags to filter by (any match)",
+            "example": ["contentstack", "youtube"]
+          },
+          "playlist": {
+            "type": "string",
+            "description": "Filter by playlist name",
+            "example": "tim"
+          },
+          "repo": {
+            "type": "string",
+            "description": "Override GITHUB_REPO environment variable",
+            "example": "owner/repo"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Override GITHUB_BRANCH environment variable",
+            "example": "main"
+          },
+          "videosFolder": {
+            "type": "string",
+            "description": "Override GITHUB_VIDEOS_FOLDER environment variable",
+            "example": "content/3.videos"
+          }
+        }
+      },
+      "VideosListResponse": {
+        "type": "object",
+        "required": ["success", "videos", "total", "limit", "offset"],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Whether the request was successful",
+            "example": true
+          },
+          "videos": {
+            "type": "array",
+            "description": "List of videos",
+            "items": {
+              "$ref": "#/components/schemas/Video"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total number of matching videos (before pagination)",
+            "example": 42
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum videos per page",
+            "example": 10
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Current pagination offset",
+            "example": 0
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message (only present on failure)"
+          }
+        }
+      },
+      "VideoResponse": {
+        "type": "object",
+        "required": ["success"],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Whether the request was successful",
+            "example": true
+          },
+          "video": {
+            "$ref": "#/components/schemas/Video"
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message (only present on failure)"
           }
         }
       }
