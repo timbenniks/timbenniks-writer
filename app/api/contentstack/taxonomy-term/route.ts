@@ -8,6 +8,71 @@ import {
 } from "../utils";
 
 /**
+ * DELETE /api/contentstack/taxonomy-term
+ * Delete a term from the content_tags taxonomy
+ *
+ * Body: { termUid: string }
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    // Validate configuration
+    const configError = validateContentstackConfig();
+    if (configError) return configError;
+
+    const body = await request.json();
+    const { termUid } = body;
+
+    if (!termUid) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Missing required field: termUid",
+        },
+        { status: 400 }
+      );
+    }
+
+    const baseUrl = getContentstackBaseUrl();
+    const headers = getContentstackHeaders();
+
+    // Delete the term from the taxonomy
+    const response = await fetch(
+      `${baseUrl}/v3/taxonomies/${CONTENT_TAGS_TAXONOMY}/terms/${termUid}`,
+      {
+        method: "DELETE",
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      // Handle 404 as "not found" (already deleted or doesn't exist)
+      if (response.status === 404) {
+        return NextResponse.json({
+          success: true,
+          message: "Term not found (may have already been deleted)",
+        });
+      }
+      return handleContentstackError(response, "Delete taxonomy term");
+    }
+
+    return NextResponse.json({
+      success: true,
+      termUid,
+      message: "Term deleted successfully",
+    });
+  } catch (error: any) {
+    console.error("Contentstack taxonomy term deletion error:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error.message || "Failed to delete taxonomy term",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * POST /api/contentstack/taxonomy-term
  * Create a new term in the content_tags taxonomy
  *

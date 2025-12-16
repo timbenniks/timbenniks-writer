@@ -124,7 +124,7 @@ export default function ContentstackVideoExportModal({
       // Process content tags
       const tags = videoFrontmatter.tags || [];
       for (let i = 0; i < tags.length; i++) {
-        const tag = tags[i].toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+        const tag = tags[i].toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
 
         updateStep("taxonomies", {
           status: "in_progress",

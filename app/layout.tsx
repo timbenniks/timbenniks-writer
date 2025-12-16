@@ -10,8 +10,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Writer - Rich Text Editor",
-  description: "A beautiful full-screen rich text editor for writing articles",
+  title: "Turbo Content - Rich Text Editor",
+  description: "A comprehensive content management and writing platform",
 };
 
 export default function RootLayout({

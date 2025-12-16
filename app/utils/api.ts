@@ -1,4 +1,5 @@
 import type { GitHubConfig } from "../types/github";
+import { stageDeleteChange } from "./staging";
 
 /**
  * Make a GitHub API request
@@ -23,7 +24,7 @@ export async function githubApiRequest(
 }
 
 /**
- * Delete a file from GitHub
+ * Delete a file from GitHub (stages the deletion)
  */
 export async function deleteGitHubFile(
   config: GitHubConfig,
@@ -31,12 +32,16 @@ export async function deleteGitHubFile(
   sha: string,
   fileName: string
 ) {
-  return githubApiRequest("delete", config, {
-    filePath,
-    sha,
-    commitMessage: `Delete article: ${fileName}`,
-    authorName: config.authorName,
-    authorEmail: config.authorEmail,
-  });
+  // Always stage deletions - no immediate commits
+  if (typeof window !== "undefined") {
+    stageDeleteChange({
+      filePath,
+      sha,
+      title: fileName,
+      commitMessage: `Delete article: ${fileName}`,
+    });
+    return { success: true, staged: true };
+  }
+  return { success: false, error: "Client-side only operation" };
 }
 

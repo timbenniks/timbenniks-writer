@@ -8,16 +8,16 @@ import {
   CONTENT_TAGS_TAXONOMY,
 } from "../../contentstack/utils";
 
-interface GenerateVideoTagsRequest {
+interface GenerateArticleTagsRequest {
   title: string;
-  description: string;
-  transcript?: string;
+  description?: string;
+  content?: string; // HTML or markdown content
   model?: string;
   temperature?: number;
 }
 
 /**
- * Build the system prompt for video tag generation
+ * Build the system prompt for article tag generation
  */
 function buildTagGenerationPrompt(existingTags: string[]): string {
   const tagsList = existingTags.length > 0
@@ -26,7 +26,7 @@ function buildTagGenerationPrompt(existingTags: string[]): string {
 
   return `You are a content tagging assistant specializing in tech content, specifically around headless CMS, composable architecture, and web development.
 
-Your task is to analyze video content and suggest relevant tags from the EXISTING taxonomy.
+Your task is to analyze article content and suggest relevant tags from the EXISTING taxonomy.
 
 CRITICAL RULES:
 1. Return ONLY a valid JSON array of strings with no additional text
@@ -34,36 +34,36 @@ CRITICAL RULES:
 3. STRONGLY PREFER using tags from the existing taxonomy list below
 4. Only suggest NEW tags if absolutely necessary and no existing tag matches
 5. Tags should match the exact names from the existing taxonomy (case-insensitive matching)
-6. Focus on technical topics, products, and concepts mentioned in the video
+6. Focus on technical topics, products, and concepts mentioned in the article
 
 EXISTING TAXONOMY TAGS (use these as your primary source):
 ${tagsList}
 
 IMPORTANT:
-- First, try to match concepts in the video to existing tags
+- First, try to match concepts in the article to existing tags
 - Only add a new tag if there's no suitable existing tag
 - When matching, consider synonyms and related concepts (e.g., "CMS" matches "headless CMS")
 - Return tags as they appear in the existing taxonomy (exact names)
 
-Example: If the video is about React and Next.js, and "Development" and "Frameworks" exist in the taxonomy, return ["Development", "Frameworks"] rather than ["React", "Next.js"]`;
+Example: If the article is about React and Next.js, and "Development" and "Frameworks" exist in the taxonomy, return ["Development", "Frameworks"] rather than ["React", "Next.js"]`;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const openai = createOpenAIClient();
-    const body: GenerateVideoTagsRequest = await request.json();
+    const body: GenerateArticleTagsRequest = await request.json();
 
     const {
       title,
       description,
-      transcript,
+      content,
       model = DEFAULT_MODEL,
       temperature = DEFAULT_TEMPERATURE,
     } = body;
 
     if (!title) {
       return NextResponse.json(
-        { success: false, error: "Video title is required" },
+        { success: false, error: "Article title is required" },
         { status: 400 }
       );
     }
@@ -126,12 +126,18 @@ export async function POST(request: NextRequest) {
       contentToAnalyze += `DESCRIPTION: ${description}\n\n`;
     }
 
-    if (transcript) {
-      // Limit transcript to first 3000 characters to stay within token limits
-      const truncatedTranscript = transcript.length > 3000
-        ? transcript.substring(0, 3000) + "..."
-        : transcript;
-      contentToAnalyze += `TRANSCRIPT (excerpt): ${truncatedTranscript}`;
+    if (content) {
+      // Limit content to first 3000 characters to stay within token limits
+      // Remove HTML tags if present for better analysis
+      const textContent = content
+        .replace(/<[^>]*>/g, " ") // Remove HTML tags
+        .replace(/\s+/g, " ") // Normalize whitespace
+        .trim();
+
+      const truncatedContent = textContent.length > 3000
+        ? textContent.substring(0, 3000) + "..."
+        : textContent;
+      contentToAnalyze += `CONTENT (excerpt): ${truncatedContent}`;
     }
 
     const systemPrompt = buildTagGenerationPrompt(existingTags);
@@ -140,13 +146,13 @@ export async function POST(request: NextRequest) {
       { role: "system", content: systemPrompt },
       {
         role: "user",
-        content: `Analyze this video content and generate relevant tags as a JSON array.
+        content: `Analyze this article content and generate relevant tags as a JSON array.
 
 ${existingTags.length > 0
             ? `IMPORTANT: Use tags from the existing taxonomy whenever possible. Only add new tags if absolutely necessary.`
             : ""}
 
-Video content:
+Article content:
 ${contentToAnalyze}
 
 Return ONLY a JSON array of tag strings, nothing else.`,
@@ -241,7 +247,7 @@ Return ONLY a JSON array of tag strings, nothing else.`,
       ).length,
     });
   } catch (error: any) {
-    console.error("Generate video tags error:", error);
+    console.error("Generate article tags error:", error);
 
     let status = 500;
     let errorMessage = error.message || "Failed to generate tags";

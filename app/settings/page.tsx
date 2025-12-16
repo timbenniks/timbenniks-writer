@@ -10,6 +10,7 @@ import {
 import PlaylistManager from "../components/PlaylistManager";
 import { useGitHubConfig } from "../hooks/useGitHubConfig";
 import { usePlaylists } from "../hooks/usePlaylists";
+import AppHeader from "../components/AppHeader";
 
 interface GitHubEnvConfig {
   repo: string;
@@ -88,6 +89,7 @@ function SettingsPageContent() {
     type: "success" | "error" | null;
     message: string;
   }>({ type: null, message: "" });
+
 
   // YouTube config from env vars
   const [youtubeConfig, setYoutubeConfig] = useState<{
@@ -200,6 +202,7 @@ function SettingsPageContent() {
       }
     };
     loadContentstackConfig();
+
 
     // Load YouTube config status
     const loadYoutubeConfig = async () => {
@@ -480,9 +483,13 @@ function SettingsPageContent() {
         const hasArticle = data.stack?.hasArticleContentType;
         setContentstackTestStatus({
           type: "success",
-          message: `Connected to Contentstack (${data.region?.toUpperCase() || "EU"}) - ${
-            data.stack?.contentTypesCount || 0
-          } content types${hasArticle ? ", article type found ✓" : ", article type NOT found ⚠️"}`,
+          message: `Connected to Contentstack (${
+            data.region?.toUpperCase() || "EU"
+          }) - ${data.stack?.contentTypesCount || 0} content types${
+            hasArticle
+              ? ", article type found ✓"
+              : ", article type NOT found ⚠️"
+          }`,
         });
       } else {
         setContentstackTestStatus({
@@ -499,6 +506,7 @@ function SettingsPageContent() {
       setIsTestingContentstack(false);
     }
   };
+
 
   // YouTube connection test handler
   const testYoutubeConnection = async () => {
@@ -549,57 +557,310 @@ function SettingsPageContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header - using simpler header for settings since it's a different layout */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            {/* Navigation links */}
-            <nav className="flex items-center gap-1">
-              <a
-                href="/"
-                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors"
-              >
-                Articles
-              </a>
-              <a
-                href="/videos"
-                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors"
-              >
-                Videos
-              </a>
-              <span className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-900 rounded-md">
-                Settings
-              </span>
-            </nav>
-          </div>
-          <p className="text-sm text-gray-600">
-            Configuration status (via environment variables)
-          </p>
-        </div>
-      </header>
+      <AppHeader subtitle="Configuration status (via environment variables)" />
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-6 py-8">
-        {/* GitHub Configuration */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-              GitHub Repository
-            </h2>
-            <p className="text-gray-600">
-              Connected to your GitHub repository for markdown article management.
-            </p>
+      <main className="w-full px-8 py-8">
+        {/* Settings Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
+          {/* GitHub Configuration */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                GitHub Repository
+              </h2>
+              <p className="text-gray-600">
+                Connected to your GitHub repository for markdown article
+                management.
+              </p>
+            </div>
+
+            <div className="space-y-6">
+              {/* Loading state */}
+              {githubConfig.loading ? (
+                <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
+                  Checking configuration...
+                </div>
+              ) : githubConfig.configured && githubConfig.config ? (
+                <>
+                  {/* Connected state */}
+                  <div className="p-4 bg-green-50 rounded-md border border-green-200">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                        <svg
+                          className="w-5 h-5 text-green-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-green-800">
+                          GitHub Connected
+                        </p>
+                        <p className="text-xs text-green-700 mt-0.5">
+                          All settings configured via environment variables
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Configuration display */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 rounded-md">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                        Repository
+                      </p>
+                      <p className="text-sm font-mono text-gray-900">
+                        {githubConfig.config.repo}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-md">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                        Branch
+                      </p>
+                      <p className="text-sm font-mono text-gray-900">
+                        {githubConfig.config.branch}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-md">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                        Folder
+                      </p>
+                      <p className="text-sm font-mono text-gray-900">
+                        {githubConfig.config.folder || "(root)"}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-md">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                        Author
+                      </p>
+                      <p className="text-sm font-mono text-gray-900">
+                        {githubConfig.config.authorName || "(not set)"}{" "}
+                        {githubConfig.config.authorEmail && (
+                          <span className="text-gray-500">
+                            &lt;{githubConfig.config.authorEmail}&gt;
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Test Status */}
+                  {testStatus.type && (
+                    <div
+                      className={clsx(
+                        "p-3 rounded-md text-sm",
+                        testStatus.type === "success"
+                          ? "bg-green-50 text-green-800 border border-green-200"
+                          : "bg-red-50 text-red-800 border border-red-200"
+                      )}
+                    >
+                      {testStatus.message}
+                    </div>
+                  )}
+
+                  {/* Test Connection Button */}
+                  <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
+                    <button
+                      onClick={testConnection}
+                      disabled={isTesting}
+                      className={clsx(
+                        BUTTON_PRIMARY_CLASSES,
+                        isTesting && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      {isTesting ? "Testing..." : "Test Connection"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                /* Not configured state */
+                <div className="p-4 bg-yellow-50 rounded-md border border-yellow-200">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
+                      <svg
+                        className="w-5 h-5 text-yellow-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-yellow-800">
+                        GitHub Not Configured
+                      </p>
+                      <p className="text-xs text-yellow-700 mt-1">
+                        {githubConfig.error ||
+                          "Add your GitHub credentials to .env.local:"}
+                      </p>
+                      <code className="block mt-2 px-3 py-2 bg-yellow-100 rounded text-xs font-mono text-yellow-900 space-y-1">
+                        <div>GITHUB_TOKEN=your_personal_access_token</div>
+                        <div>GITHUB_REPO=owner/repo</div>
+                        <div>GITHUB_BRANCH=main</div>
+                        <div>GITHUB_FOLDER=content/articles</div>
+                        <div>GITHUB_AUTHOR_NAME=Your Name</div>
+                        <div>GITHUB_AUTHOR_EMAIL=you@example.com</div>
+                      </code>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="space-y-6">
-            {/* Loading state */}
-            {githubConfig.loading ? (
-              <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
-                Checking configuration...
+          {/* Google Docs Integration */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                Google Docs Integration
+              </h2>
+              <p className="text-gray-600">
+                Connect your Google account to export articles directly to
+                Google Docs.
+              </p>
+            </div>
+
+            <div className="space-y-6">
+              {/* Google Connection Status */}
+              {googleStatus.loading ? (
+                <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
+                  Checking connection status...
+                </div>
+              ) : googleStatus.connected ? (
+                <div className="p-4 bg-green-50 rounded-md border border-green-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-green-800">
+                        Connected to Google
+                      </p>
+                      {googleStatus.email && (
+                        <p className="text-xs text-green-700 mt-1">
+                          {googleStatus.name && `${googleStatus.name} • `}
+                          {googleStatus.email}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={disconnectGoogle}
+                      className="px-4 py-2 text-sm font-medium bg-white text-green-800 border border-green-300 rounded-md hover:bg-green-100 hover:border-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                      aria-label="Disconnect Google account"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-gray-50 rounded-md border border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">
+                        Not connected to Google
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        Connect your Google account to enable Google Docs export
+                      </p>
+                    </div>
+                    <button
+                      onClick={connectGoogle}
+                      className={BUTTON_PRIMARY_CLASSES}
+                    >
+                      Connect Google Account
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Google Status Messages - Only show if there's a message */}
+              {googleMessage.type && (
+                <div
+                  className={clsx(
+                    "p-3 rounded-md text-sm",
+                    googleMessage.type === "success"
+                      ? "bg-green-50 text-green-800 border border-green-200"
+                      : "bg-red-50 text-red-800 border border-red-200"
+                  )}
+                >
+                  {googleMessage.message}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* AI Writing Assistant */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                AI Writing Assistant
+              </h2>
+              <p className="text-gray-600">
+                All AI settings are configured via environment variables. Tone
+                of voice and article structure instructions are managed in code.
+              </p>
+            </div>
+
+            <div className="space-y-6">
+              {/* Test Connection */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={testAIConnection}
+                  disabled={isTestingAI}
+                  className={clsx(
+                    BUTTON_PRIMARY_CLASSES,
+                    isTestingAI && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  {isTestingAI ? "Testing..." : "Test Connection"}
+                </button>
+                {aiTestStatus.type && (
+                  <div
+                    className={clsx(
+                      "px-4 py-2 rounded-md text-sm",
+                      aiTestStatus.type === "success"
+                        ? "bg-green-50 text-green-800 border border-green-200"
+                        : "bg-red-50 text-red-800 border border-red-200"
+                    )}
+                  >
+                    {aiTestStatus.message}
+                  </div>
+                )}
               </div>
-            ) : githubConfig.configured && githubConfig.config ? (
-              <>
-                {/* Connected state */}
+            </div>
+          </div>
+
+          {/* Gemini Image Generation */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                AI Image Generation
+              </h2>
+              <p className="text-gray-600">
+                Generate cover images using Google Gemini Imagen 3. Configure
+                via environment variables.
+              </p>
+            </div>
+
+            <div className="space-y-6">
+              {/* Status */}
+              {geminiConfigured === null ? (
+                <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
+                  Checking configuration...
+                </div>
+              ) : geminiConfigured ? (
                 <div className="p-4 bg-green-50 rounded-md border border-green-200">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
@@ -619,738 +880,488 @@ function SettingsPageContent() {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-green-800">
-                        GitHub Connected
+                        Gemini API Configured
                       </p>
                       <p className="text-xs text-green-700 mt-0.5">
-                        All settings configured via environment variables
+                        You can generate images in the article editor
                       </p>
                     </div>
                   </div>
                 </div>
-
-                {/* Configuration display */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 bg-gray-50 rounded-md">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
-                      Repository
-                    </p>
-                    <p className="text-sm font-mono text-gray-900">
-                      {githubConfig.config.repo}
-                    </p>
-                  </div>
-                  <div className="p-4 bg-gray-50 rounded-md">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
-                      Branch
-                    </p>
-                    <p className="text-sm font-mono text-gray-900">
-                      {githubConfig.config.branch}
-                    </p>
-                  </div>
-                  <div className="p-4 bg-gray-50 rounded-md">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
-                      Folder
-                    </p>
-                    <p className="text-sm font-mono text-gray-900">
-                      {githubConfig.config.folder || "(root)"}
-                    </p>
-                  </div>
-                  <div className="p-4 bg-gray-50 rounded-md">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
-                      Author
-                    </p>
-                    <p className="text-sm font-mono text-gray-900">
-                      {githubConfig.config.authorName || "(not set)"}{" "}
-                      {githubConfig.config.authorEmail && (
-                        <span className="text-gray-500">
-                          &lt;{githubConfig.config.authorEmail}&gt;
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Test Status */}
-                {testStatus.type && (
-                  <div
-                    className={clsx(
-                      "p-3 rounded-md text-sm",
-                      testStatus.type === "success"
-                        ? "bg-green-50 text-green-800 border border-green-200"
-                        : "bg-red-50 text-red-800 border border-red-200"
-                    )}
-                  >
-                    {testStatus.message}
-                  </div>
-                )}
-
-                {/* Test Connection Button */}
-                <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
-                  <button
-                    onClick={testConnection}
-                    disabled={isTesting}
-                    className={clsx(
-                      BUTTON_PRIMARY_CLASSES,
-                      isTesting && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    {isTesting ? "Testing..." : "Test Connection"}
-                  </button>
-                </div>
-              </>
-            ) : (
-              /* Not configured state */
-              <div className="p-4 bg-yellow-50 rounded-md border border-yellow-200">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
-                    <svg
-                      className="w-5 h-5 text-yellow-600"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-yellow-800">
-                      GitHub Not Configured
-                    </p>
-                    <p className="text-xs text-yellow-700 mt-1">
-                      {githubConfig.error || "Add your GitHub credentials to .env.local:"}
-                    </p>
-                    <code className="block mt-2 px-3 py-2 bg-yellow-100 rounded text-xs font-mono text-yellow-900 space-y-1">
-                      <div>GITHUB_TOKEN=your_personal_access_token</div>
-                      <div>GITHUB_REPO=owner/repo</div>
-                      <div>GITHUB_BRANCH=main</div>
-                      <div>GITHUB_FOLDER=content/articles</div>
-                      <div>GITHUB_AUTHOR_NAME=Your Name</div>
-                      <div>GITHUB_AUTHOR_EMAIL=you@example.com</div>
-                    </code>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Google Docs Integration */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-              Google Docs Integration
-            </h2>
-            <p className="text-gray-600">
-              Connect your Google account to export articles directly to Google
-              Docs.
-            </p>
-          </div>
-
-          <div className="space-y-6">
-            {/* Google Connection Status */}
-            {googleStatus.loading ? (
-              <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
-                Checking connection status...
-              </div>
-            ) : googleStatus.connected ? (
-              <div className="p-4 bg-green-50 rounded-md border border-green-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-green-800">
-                      Connected to Google
-                    </p>
-                    {googleStatus.email && (
-                      <p className="text-xs text-green-700 mt-1">
-                        {googleStatus.name && `${googleStatus.name} • `}
-                        {googleStatus.email}
+              ) : (
+                <div className="p-4 bg-yellow-50 rounded-md border border-yellow-200">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
+                      <svg
+                        className="w-5 h-5 text-yellow-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-yellow-800">
+                        Gemini API Not Configured
                       </p>
-                    )}
+                      <p className="text-xs text-yellow-700 mt-1">
+                        Add your Gemini API key to enable AI image generation:
+                      </p>
+                      <code className="block mt-2 px-3 py-2 bg-yellow-100 rounded text-xs font-mono text-yellow-900">
+                        GEMINI_API_KEY=your_api_key_here
+                      </code>
+                      <p className="text-xs text-yellow-700 mt-2">
+                        Get your API key from{" "}
+                        <a
+                          href="https://aistudio.google.com/apikey"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:text-yellow-800"
+                        >
+                          Google AI Studio
+                        </a>
+                      </p>
+                    </div>
                   </div>
-                  <button
-                    onClick={disconnectGoogle}
-                    className="px-4 py-2 text-sm font-medium bg-white text-green-800 border border-green-300 rounded-md hover:bg-green-100 hover:border-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-                    aria-label="Disconnect Google account"
-                  >
-                    Disconnect
-                  </button>
                 </div>
-              </div>
-            ) : (
-              <div className="p-4 bg-gray-50 rounded-md border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">
-                      Not connected to Google
-                    </p>
-                    <p className="text-xs text-gray-600 mt-1">
-                      Connect your Google account to enable Google Docs export
-                    </p>
-                  </div>
-                  <button
-                    onClick={connectGoogle}
-                    className={BUTTON_PRIMARY_CLASSES}
-                  >
-                    Connect Google Account
-                  </button>
-                </div>
-              </div>
-            )}
+              )}
 
-            {/* Google Status Messages - Only show if there's a message */}
-            {googleMessage.type && (
-              <div
-                className={clsx(
-                  "p-3 rounded-md text-sm",
-                  googleMessage.type === "success"
-                    ? "bg-green-50 text-green-800 border border-green-200"
-                    : "bg-red-50 text-red-800 border border-red-200"
-                )}
-              >
-                {googleMessage.message}
+              {/* Info */}
+              <div className="text-sm text-gray-500 space-y-2">
+                <p>
+                  <strong>Model:</strong> Gemini 3 Pro
+                  (gemini-3-pro-image-preview)
+                </p>
+                <p>
+                  <strong>Features:</strong> Context-aware cover images,
+                  feedback-based refinement, automatic Cloudinary upload
+                </p>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* AI Writing Assistant */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-              AI Writing Assistant
-            </h2>
-            <p className="text-gray-600">
-              All AI settings are configured via environment variables. Tone of
-              voice and article structure instructions are managed in code.
-            </p>
+            </div>
           </div>
 
-          <div className="space-y-6">
-            {/* Test Connection */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={testAIConnection}
-                disabled={isTestingAI}
-                className={clsx(
-                  BUTTON_PRIMARY_CLASSES,
-                  isTestingAI && "opacity-50 cursor-not-allowed"
-                )}
-              >
-                {isTestingAI ? "Testing..." : "Test Connection"}
-              </button>
-              {aiTestStatus.type && (
+          {/* Cloudinary Configuration */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                Cloudinary Media Library
+              </h2>
+              <p className="text-gray-600">
+                Select and upload images from your Cloudinary DAM. Configure via
+                environment variables.
+              </p>
+            </div>
+
+            <div className="space-y-6">
+              {/* Status */}
+              {cloudinaryConfigured === null ? (
+                <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
+                  Checking configuration...
+                </div>
+              ) : cloudinaryConfigured ? (
+                <div className="p-4 bg-green-50 rounded-md border border-green-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <svg
+                        className="w-5 h-5 text-green-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-green-800">
+                        Cloudinary Configured
+                      </p>
+                      <p className="text-xs text-green-700 mt-0.5">
+                        You can select images from your media library
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-yellow-50 rounded-md border border-yellow-200">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
+                      <svg
+                        className="w-5 h-5 text-yellow-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-yellow-800">
+                        Cloudinary Not Configured
+                      </p>
+                      <p className="text-xs text-yellow-700 mt-1">
+                        Add your Cloudinary credentials to enable image
+                        selection and upload:
+                      </p>
+                      <code className="block mt-2 px-3 py-2 bg-yellow-100 rounded text-xs font-mono text-yellow-900 space-y-1">
+                        <div>CLOUDINARY_CLOUD_NAME=your_cloud_name</div>
+                        <div>CLOUDINARY_API_KEY=your_api_key</div>
+                        <div>CLOUDINARY_API_SECRET=your_api_secret</div>
+                      </code>
+                      <p className="text-xs text-yellow-700 mt-2">
+                        Find these in your{" "}
+                        <a
+                          href="https://console.cloudinary.com/settings/api-keys"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:text-yellow-800"
+                        >
+                          Cloudinary Console
+                        </a>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Info */}
+              <div className="text-sm text-gray-500 space-y-2">
+                <p>
+                  <strong>Features:</strong> Media library browser, automatic
+                  image optimization, AI image upload
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Contentstack CMS Integration */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                Contentstack CMS
+              </h2>
+              <p className="text-gray-600">
+                Export articles directly to Contentstack CMS. Configure via
+                environment variables.
+              </p>
+            </div>
+
+            <div className="space-y-6">
+              {/* Status */}
+              {contentstackConfig === null ? (
+                <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
+                  Checking configuration...
+                </div>
+              ) : contentstackConfig.configured ? (
+                <div className="p-4 bg-green-50 rounded-md border border-green-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                        <svg
+                          className="w-5 h-5 text-green-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-green-800">
+                          Contentstack Configured
+                        </p>
+                        <p className="text-xs text-green-700 mt-0.5">
+                          Region:{" "}
+                          {contentstackConfig.region?.toUpperCase() || "EU"}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={testContentstackConnection}
+                      disabled={isTestingContentstack}
+                      className={clsx(
+                        "px-4 py-2 text-sm font-medium bg-white text-green-800 border border-green-300 rounded-md hover:bg-green-100 hover:border-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2",
+                        isTestingContentstack && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      {isTestingContentstack ? "Testing..." : "Test Connection"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-yellow-50 rounded-md border border-yellow-200">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
+                      <svg
+                        className="w-5 h-5 text-yellow-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-yellow-800">
+                        Contentstack Not Configured
+                      </p>
+                      <p className="text-xs text-yellow-700 mt-1">
+                        Add your Contentstack credentials to enable CMS export:
+                      </p>
+                      <code className="block mt-2 px-3 py-2 bg-yellow-100 rounded text-xs font-mono text-yellow-900 space-y-1">
+                        <div>CONTENTSTACK_API_KEY=your_stack_api_key</div>
+                        <div>
+                          CONTENTSTACK_MANAGEMENT_TOKEN=your_management_token
+                        </div>
+                        <div>CONTENTSTACK_REGION=eu</div>
+                      </code>
+                      <p className="text-xs text-yellow-700 mt-2">
+                        Get your credentials from the{" "}
+                        <a
+                          href="https://app.contentstack.com/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:text-yellow-800"
+                        >
+                          Contentstack Dashboard
+                        </a>{" "}
+                        under Settings → Tokens
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Test Status Messages */}
+              {contentstackTestStatus.type && (
                 <div
                   className={clsx(
-                    "px-4 py-2 rounded-md text-sm",
-                    aiTestStatus.type === "success"
+                    "p-3 rounded-md text-sm",
+                    contentstackTestStatus.type === "success"
                       ? "bg-green-50 text-green-800 border border-green-200"
                       : "bg-red-50 text-red-800 border border-red-200"
                   )}
                 >
-                  {aiTestStatus.message}
+                  {contentstackTestStatus.message}
+                </div>
+              )}
+
+              {/* Info */}
+              <div className="text-sm text-gray-500 space-y-2">
+                <p>
+                  <strong>Content Type:</strong> article
+                </p>
+                <p>
+                  <strong>Features:</strong> Create/update articles, automatic
+                  taxonomy management, image upload from URL
+                </p>
+                <p>
+                  <strong>Regions:</strong> EU, US, Azure NA, Azure EU
+                </p>
+              </div>
+
+              {/* Taxonomy Management Link */}
+              {contentstackConfig?.configured && (
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        Taxonomy Management
+                      </h3>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Manage taxonomy terms, create new terms, and use AI to consolidate duplicates
+                      </p>
+                    </div>
+                    <a
+                      href="/contentstack/taxonomy"
+                      className="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-md hover:bg-gray-800 transition-colors"
+                    >
+                      Open Taxonomy Manager
+                    </a>
+                  </div>
                 </div>
               )}
             </div>
           </div>
-        </div>
 
-        {/* Gemini Image Generation */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-              AI Image Generation
-            </h2>
-            <p className="text-gray-600">
-              Generate cover images using Google Gemini Imagen 3. Configure via
-              environment variables.
-            </p>
-          </div>
-
-          <div className="space-y-6">
-            {/* Status */}
-            {geminiConfigured === null ? (
-              <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
-                Checking configuration...
-              </div>
-            ) : geminiConfigured ? (
-              <div className="p-4 bg-green-50 rounded-md border border-green-200">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <svg
-                      className="w-5 h-5 text-green-600"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-green-800">
-                      Gemini API Configured
-                    </p>
-                    <p className="text-xs text-green-700 mt-0.5">
-                      You can generate images in the article editor
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="p-4 bg-yellow-50 rounded-md border border-yellow-200">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
-                    <svg
-                      className="w-5 h-5 text-yellow-600"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-yellow-800">
-                      Gemini API Not Configured
-                    </p>
-                    <p className="text-xs text-yellow-700 mt-1">
-                      Add your Gemini API key to enable AI image generation:
-                    </p>
-                    <code className="block mt-2 px-3 py-2 bg-yellow-100 rounded text-xs font-mono text-yellow-900">
-                      GEMINI_API_KEY=your_api_key_here
-                    </code>
-                    <p className="text-xs text-yellow-700 mt-2">
-                      Get your API key from{" "}
-                      <a
-                        href="https://aistudio.google.com/apikey"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline hover:text-yellow-800"
-                      >
-                        Google AI Studio
-                      </a>
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Info */}
-            <div className="text-sm text-gray-500 space-y-2">
-              <p>
-                <strong>Model:</strong> Gemini 3 Pro
-                (gemini-3-pro-image-preview)
-              </p>
-              <p>
-                <strong>Features:</strong> Context-aware cover images,
-                feedback-based refinement, automatic Cloudinary upload
+          {/* YouTube API Configuration */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                YouTube API
+              </h2>
+              <p className="text-gray-600">
+                Import videos from YouTube playlists. Configure via environment
+                variables.
               </p>
             </div>
-          </div>
-        </div>
 
-        {/* Cloudinary Configuration */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-              Cloudinary Media Library
-            </h2>
-            <p className="text-gray-600">
-              Select and upload images from your Cloudinary DAM. Configure via
-              environment variables.
-            </p>
-          </div>
-
-          <div className="space-y-6">
-            {/* Status */}
-            {cloudinaryConfigured === null ? (
-              <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
-                Checking configuration...
-              </div>
-            ) : cloudinaryConfigured ? (
-              <div className="p-4 bg-green-50 rounded-md border border-green-200">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <svg
-                      className="w-5 h-5 text-green-600"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-green-800">
-                      Cloudinary Configured
-                    </p>
-                    <p className="text-xs text-green-700 mt-0.5">
-                      You can select images from your media library
-                    </p>
-                  </div>
+            <div className="space-y-6">
+              {/* Status */}
+              {youtubeConfig === null ? (
+                <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
+                  Checking configuration...
                 </div>
-              </div>
-            ) : (
-              <div className="p-4 bg-yellow-50 rounded-md border border-yellow-200">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
-                    <svg
-                      className="w-5 h-5 text-yellow-600"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-yellow-800">
-                      Cloudinary Not Configured
-                    </p>
-                    <p className="text-xs text-yellow-700 mt-1">
-                      Add your Cloudinary credentials to enable image selection
-                      and upload:
-                    </p>
-                    <code className="block mt-2 px-3 py-2 bg-yellow-100 rounded text-xs font-mono text-yellow-900 space-y-1">
-                      <div>CLOUDINARY_CLOUD_NAME=your_cloud_name</div>
-                      <div>CLOUDINARY_API_KEY=your_api_key</div>
-                      <div>CLOUDINARY_API_SECRET=your_api_secret</div>
-                    </code>
-                    <p className="text-xs text-yellow-700 mt-2">
-                      Find these in your{" "}
-                      <a
-                        href="https://console.cloudinary.com/settings/api-keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline hover:text-yellow-800"
-                      >
-                        Cloudinary Console
-                      </a>
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Info */}
-            <div className="text-sm text-gray-500 space-y-2">
-              <p>
-                <strong>Features:</strong> Media library browser, automatic
-                image optimization, AI image upload
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Contentstack CMS Integration */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-              Contentstack CMS
-            </h2>
-            <p className="text-gray-600">
-              Export articles directly to Contentstack CMS. Configure via
-              environment variables.
-            </p>
-          </div>
-
-          <div className="space-y-6">
-            {/* Status */}
-            {contentstackConfig === null ? (
-              <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
-                Checking configuration...
-              </div>
-            ) : contentstackConfig.configured ? (
-              <div className="p-4 bg-green-50 rounded-md border border-green-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                      <svg
-                        className="w-5 h-5 text-green-600"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-green-800">
-                        Contentstack Configured
-                      </p>
-                      <p className="text-xs text-green-700 mt-0.5">
-                        Region: {contentstackConfig.region?.toUpperCase() || "EU"}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={testContentstackConnection}
-                    disabled={isTestingContentstack}
-                    className={clsx(
-                      "px-4 py-2 text-sm font-medium bg-white text-green-800 border border-green-300 rounded-md hover:bg-green-100 hover:border-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2",
-                      isTestingContentstack && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    {isTestingContentstack ? "Testing..." : "Test Connection"}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="p-4 bg-yellow-50 rounded-md border border-yellow-200">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
-                    <svg
-                      className="w-5 h-5 text-yellow-600"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-yellow-800">
-                      Contentstack Not Configured
-                    </p>
-                    <p className="text-xs text-yellow-700 mt-1">
-                      Add your Contentstack credentials to enable CMS export:
-                    </p>
-                    <code className="block mt-2 px-3 py-2 bg-yellow-100 rounded text-xs font-mono text-yellow-900 space-y-1">
-                      <div>CONTENTSTACK_API_KEY=your_stack_api_key</div>
-                      <div>CONTENTSTACK_MANAGEMENT_TOKEN=your_management_token</div>
-                      <div>CONTENTSTACK_REGION=eu</div>
-                    </code>
-                    <p className="text-xs text-yellow-700 mt-2">
-                      Get your credentials from the{" "}
-                      <a
-                        href="https://app.contentstack.com/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline hover:text-yellow-800"
-                      >
-                        Contentstack Dashboard
-                      </a>{" "}
-                      under Settings → Tokens
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Test Status Messages */}
-            {contentstackTestStatus.type && (
-              <div
-                className={clsx(
-                  "p-3 rounded-md text-sm",
-                  contentstackTestStatus.type === "success"
-                    ? "bg-green-50 text-green-800 border border-green-200"
-                    : "bg-red-50 text-red-800 border border-red-200"
-                )}
-              >
-                {contentstackTestStatus.message}
-              </div>
-            )}
-
-            {/* Info */}
-            <div className="text-sm text-gray-500 space-y-2">
-              <p>
-                <strong>Content Type:</strong> article
-              </p>
-              <p>
-                <strong>Features:</strong> Create/update articles, automatic
-                taxonomy management, image upload from URL
-              </p>
-              <p>
-                <strong>Regions:</strong> EU, US, Azure NA, Azure EU
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* YouTube API Configuration */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-              YouTube API
-            </h2>
-            <p className="text-gray-600">
-              Import videos from YouTube playlists. Configure via environment
-              variables.
-            </p>
-          </div>
-
-          <div className="space-y-6">
-            {/* Status */}
-            {youtubeConfig === null ? (
-              <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">
-                Checking configuration...
-              </div>
-            ) : youtubeConfig.configured ? (
-              <div className="p-4 bg-green-50 rounded-md border border-green-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                      <svg
-                        className="w-5 h-5 text-green-600"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-green-800">
-                        YouTube API Configured
-                      </p>
-                      {youtubeConfig.keyPreview && (
-                        <p className="text-xs text-green-700 mt-0.5 font-mono">
-                          API Key: {youtubeConfig.keyPreview}
+              ) : youtubeConfig.configured ? (
+                <div className="p-4 bg-green-50 rounded-md border border-green-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                        <svg
+                          className="w-5 h-5 text-green-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-green-800">
+                          YouTube API Configured
                         </p>
+                        {youtubeConfig.keyPreview && (
+                          <p className="text-xs text-green-700 mt-0.5 font-mono">
+                            API Key: {youtubeConfig.keyPreview}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={testYoutubeConnection}
+                      disabled={isTestingYoutube}
+                      className={clsx(
+                        "px-4 py-2 text-sm font-medium bg-white text-green-800 border border-green-300 rounded-md hover:bg-green-100 hover:border-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2",
+                        isTestingYoutube && "opacity-50 cursor-not-allowed"
                       )}
+                    >
+                      {isTestingYoutube ? "Testing..." : "Test Connection"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-yellow-50 rounded-md border border-yellow-200">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
+                      <svg
+                        className="w-5 h-5 text-yellow-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-yellow-800">
+                        YouTube API Not Configured
+                      </p>
+                      <p className="text-xs text-yellow-700 mt-1">
+                        Add your YouTube API key to enable video import:
+                      </p>
+                      <code className="block mt-2 px-3 py-2 bg-yellow-100 rounded text-xs font-mono text-yellow-900">
+                        YOUTUBE_KEY=your_api_key_here
+                      </code>
+                      <p className="text-xs text-yellow-700 mt-2">
+                        Get your API key from the{" "}
+                        <a
+                          href="https://console.cloud.google.com/apis/credentials"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:text-yellow-800"
+                        >
+                          Google Cloud Console
+                        </a>
+                      </p>
                     </div>
                   </div>
-                  <button
-                    onClick={testYoutubeConnection}
-                    disabled={isTestingYoutube}
-                    className={clsx(
-                      "px-4 py-2 text-sm font-medium bg-white text-green-800 border border-green-300 rounded-md hover:bg-green-100 hover:border-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2",
-                      isTestingYoutube && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    {isTestingYoutube ? "Testing..." : "Test Connection"}
-                  </button>
                 </div>
-              </div>
-            ) : (
-              <div className="p-4 bg-yellow-50 rounded-md border border-yellow-200">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
-                    <svg
-                      className="w-5 h-5 text-yellow-600"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-yellow-800">
-                      YouTube API Not Configured
-                    </p>
-                    <p className="text-xs text-yellow-700 mt-1">
-                      Add your YouTube API key to enable video import:
-                    </p>
-                    <code className="block mt-2 px-3 py-2 bg-yellow-100 rounded text-xs font-mono text-yellow-900">
-                      YOUTUBE_KEY=your_api_key_here
-                    </code>
-                    <p className="text-xs text-yellow-700 mt-2">
-                      Get your API key from the{" "}
-                      <a
-                        href="https://console.cloud.google.com/apis/credentials"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline hover:text-yellow-800"
-                      >
-                        Google Cloud Console
-                      </a>
-                    </p>
-                  </div>
+              )}
+
+              {/* Test Status Messages */}
+              {youtubeTestStatus.type && (
+                <div
+                  className={clsx(
+                    "p-3 rounded-md text-sm",
+                    youtubeTestStatus.type === "success"
+                      ? "bg-green-50 text-green-800 border border-green-200"
+                      : "bg-red-50 text-red-800 border border-red-200"
+                  )}
+                >
+                  {youtubeTestStatus.message}
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Test Status Messages */}
-            {youtubeTestStatus.type && (
-              <div
-                className={clsx(
-                  "p-3 rounded-md text-sm",
-                  youtubeTestStatus.type === "success"
-                    ? "bg-green-50 text-green-800 border border-green-200"
-                    : "bg-red-50 text-red-800 border border-red-200"
-                )}
-              >
-                {youtubeTestStatus.message}
+              {/* Info */}
+              <div className="text-sm text-gray-500 space-y-2">
+                <p>
+                  <strong>Features:</strong> Import videos from playlists, fetch
+                  transcripts, update metadata
+                </p>
+                <p>
+                  <strong>API:</strong> YouTube Data API v3 (read-only)
+                </p>
               </div>
-            )}
-
-            {/* Info */}
-            <div className="text-sm text-gray-500 space-y-2">
-              <p>
-                <strong>Features:</strong> Import videos from playlists, fetch
-                transcripts, update metadata
-              </p>
-              <p>
-                <strong>API:</strong> YouTube Data API v3 (read-only)
-              </p>
             </div>
           </div>
-        </div>
 
-        {/* Playlists Configuration */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-              YouTube Playlists
-            </h2>
-            <p className="text-gray-600">
-              Manage which YouTube playlists can be imported. Each playlist maps
-              to a folder in your repository.
-            </p>
+          {/* Playlists Configuration */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 lg:col-span-2 xl:col-span-3">
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                YouTube Playlists
+              </h2>
+              <p className="text-gray-600">
+                Manage which YouTube playlists can be imported. Each playlist
+                maps to a folder in your repository.
+              </p>
+            </div>
+
+            <PlaylistManager
+              playlists={playlists}
+              onAdd={addPlaylist}
+              onUpdate={updatePlaylist}
+              onRemove={removePlaylist}
+              isLoading={playlistsLoading}
+              isSaving={playlistsSaving}
+              error={playlistsError}
+            />
           </div>
-
-          <PlaylistManager
-            playlists={playlists}
-            onAdd={addPlaylist}
-            onUpdate={updatePlaylist}
-            onRemove={removePlaylist}
-            isLoading={playlistsLoading}
-            isSaving={playlistsSaving}
-            error={playlistsError}
-          />
         </div>
       </main>
     </div>

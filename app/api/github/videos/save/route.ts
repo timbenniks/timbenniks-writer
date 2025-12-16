@@ -3,6 +3,7 @@ import { Octokit } from "@octokit/rest";
 import { parseRepo, validateGitHubFields } from "../../utils";
 import yaml from "js-yaml";
 import type { VideoFrontmatter } from "@/app/types/video";
+import { purgeVideosCache } from "../../../../utils/cache";
 
 const DEFAULT_VIDEOS_FOLDER = "content/3.videos";
 
@@ -106,11 +107,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Initialize Octokit
-    const octokit = new Octokit({
-      auth: token,
-    });
-
     // Determine file path
     const videosFolder =
       process.env.GITHUB_VIDEOS_FOLDER || DEFAULT_VIDEOS_FOLDER;
@@ -120,96 +116,18 @@ export async function POST(request: NextRequest) {
     );
     const newFilePath = `${videosFolder}/${videoFrontmatter.playlist}/${filename}`;
 
-    // Build file content
-    const yamlContent = frontmatterToYaml(videoFrontmatter);
-    const fileContent = `---\n${yamlContent}---\n\n`;
-
-    // Get author info from environment
-    const authorName = process.env.GITHUB_AUTHOR_NAME || "Tim Benniks Writer";
-    const authorEmail =
-      process.env.GITHUB_AUTHOR_EMAIL || "noreply@timbenniks.dev";
-
-    // Check if we're renaming (path changed)
+    // Always stage changes - no immediate commits
+    // Return success response indicating the change should be staged client-side
     const isRename = existingFilePath && existingFilePath !== newFilePath;
-
-    try {
-      // If renaming, delete old file first
-      if (isRename && sha) {
-        await octokit.repos.deleteFile({
-          owner,
-          repo: repoName,
-          path: existingFilePath,
-          message: `Rename video: ${videoFrontmatter.title}`,
-          sha,
-          branch,
-          author: {
-            name: authorName,
-            email: authorEmail,
-          },
-        });
-      }
-
-      // Get current SHA if updating existing file at new path
-      let currentSha: string | undefined;
-      if (!isRename && sha) {
-        currentSha = sha;
-      } else if (!isRename) {
-        // Check if file exists at new path
-        try {
-          const existingFile = await octokit.repos.getContent({
-            owner,
-            repo: repoName,
-            path: newFilePath,
-            ref: branch,
-          });
-          if ("sha" in existingFile.data) {
-            currentSha = existingFile.data.sha;
-          }
-        } catch (e: any) {
-          // File doesn't exist, that's fine for new videos
-          if (e.status !== 404) throw e;
-        }
-      }
-
-      // Create or update file
-      const response = await octokit.repos.createOrUpdateFileContents({
-        owner,
-        repo: repoName,
-        path: newFilePath,
-        message:
-          commitMessage ||
-          `${currentSha ? "Update" : "Add"} video: ${videoFrontmatter.title}`,
-        content: Buffer.from(fileContent).toString("base64"),
-        sha: currentSha,
-        branch,
-        author: {
-          name: authorName,
-          email: authorEmail,
-        },
-      });
-
-      return NextResponse.json({
-        success: true,
-        filePath: newFilePath,
-        sha: response.data.content?.sha,
-        commit: response.data.commit?.sha,
-        renamed: isRename,
-      });
-    } catch (error: any) {
-      // Handle conflict (file changed remotely)
-      if (error.status === 409) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Conflict: The file has been modified. Please refresh and try again.",
-            conflict: true,
-          },
-          { status: 409 }
-        );
-      }
-      throw error;
-    }
+    return NextResponse.json({
+      success: true,
+      staged: true,
+      filePath: newFilePath,
+      oldPath: isRename ? existingFilePath : undefined,
+      sha: sha || null,
+      type: isRename ? "rename" : (sha ? "update" : "create"),
+      message: "Change staged successfully",
+    });
   } catch (error: any) {
     console.error("GitHub video save error:", error);
     return NextResponse.json(

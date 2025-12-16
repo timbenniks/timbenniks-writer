@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Get author info from environment
-    const authorName = process.env.GITHUB_AUTHOR_NAME || "Tim Benniks Writer";
+    const authorName = process.env.GITHUB_AUTHOR_NAME || "Turbo Content";
     const authorEmail =
       process.env.GITHUB_AUTHOR_EMAIL || "noreply@timbenniks.dev";
 

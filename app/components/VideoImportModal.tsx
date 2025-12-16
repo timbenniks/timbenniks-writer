@@ -5,6 +5,8 @@ import clsx from "clsx";
 import type { Playlist, YouTubeVideo, VideoFrontmatter, GitHubVideoFile } from "../types/video";
 import type { GitHubConfig } from "../types/github";
 import { generatePosition } from "../types/video";
+import { stageVideoChange } from "../utils/staging";
+import yaml from "js-yaml";
 
 interface VideoImportModalProps {
   isOpen: boolean;
@@ -177,31 +179,52 @@ export default function VideoImportModal({
           duration: video.duration,
         };
 
-        // Save to GitHub
-        const response = await fetch("/api/github/videos/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            repo: githubConfig.repo,
-            branch: githubConfig.branch,
-            frontmatter,
-          }),
+        // Build file content
+        const videosFolder =
+          process.env.NEXT_PUBLIC_GITHUB_VIDEOS_FOLDER || "content/3.videos";
+        const filename = `${frontmatter.position}-${frontmatter.videoId}.md`;
+        const filePath = `${videosFolder}/${frontmatter.playlist}/${filename}`;
+
+        const yamlContent = yaml.dump(
+          {
+            date: frontmatter.date || "",
+            position: frontmatter.position || "000",
+            title: frontmatter.title || "",
+            description: frontmatter.description || "",
+            image: frontmatter.image || "",
+            videoId: frontmatter.videoId || "",
+            transcript: frontmatter.transcript || "",
+            tags: frontmatter.tags || [],
+            playlist: frontmatter.playlist || "",
+            duration: frontmatter.duration || undefined,
+          },
+          {
+            lineWidth: -1,
+            noRefs: true,
+            sortKeys: false,
+            quotingType: '"',
+            forceQuotes: false,
+          }
+        );
+        const fileContent = `---\n${yamlContent}---\n\n`;
+
+        // Always stage changes
+        stageVideoChange({
+          filePath: filePath,
+          content: fileContent,
+          title: frontmatter.title,
+          videoId: frontmatter.videoId,
+          commitMessage: `Import video: ${frontmatter.title}`,
         });
 
-        const data = await response.json();
-
-        if (data.success) {
-          setVideos((prev) =>
-            prev.map((v) =>
-              v.videoId === video.videoId
-                ? { ...v, importing: false, imported: true, exists: true }
-                : v
-            )
-          );
-          nextPosition++;
-        } else {
-          throw new Error(data.error || "Failed to save video");
-        }
+        setVideos((prev) =>
+          prev.map((v) =>
+            v.videoId === video.videoId
+              ? { ...v, importing: false, imported: true, exists: true }
+              : v
+          )
+        );
+        nextPosition++;
       } catch (err: any) {
         setVideos((prev) =>
           prev.map((v) =>

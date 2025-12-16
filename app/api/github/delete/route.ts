@@ -29,37 +29,16 @@ export async function POST(request: NextRequest) {
     if (repoResult instanceof NextResponse) {
       return repoResult;
     }
-    const { owner, repoName } = repoResult;
-    const { branch, filePath, sha, commitMessage, authorName, authorEmail } = body;
-    const octokit = new Octokit({ auth: token });
-
-    const deleteOptions: {
-      owner: string;
-      repo: string;
-      path: string;
-      message: string;
-      sha: string;
-      branch: string;
-      committer?: { name: string; email: string };
-      author?: { name: string; email: string };
-    } = {
-      owner,
-      repo: repoName,
-      path: filePath,
-      message: commitMessage,
-      sha,
-      branch,
-    };
-
-    if (authorName && authorEmail) {
-      deleteOptions.committer = { name: authorName, email: authorEmail };
-      deleteOptions.author = { name: authorName, email: authorEmail };
-    }
-
-    await octokit.repos.deleteFile(deleteOptions);
-
+    const { filePath, sha, commitMessage } = body;
+    
+    // Always stage deletions - no immediate commits
+    // Return success response indicating the deletion should be staged client-side
     return NextResponse.json({
       success: true,
+      staged: true,
+      filePath,
+      sha,
+      message: "Deletion staged successfully",
     });
   } catch (error: any) {
     console.error("GitHub delete API error:", error);

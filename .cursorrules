@@ -1,17 +1,17 @@
 # Tim Benniks Writer - Cursor Rules
 
 ## Project Overview
-A full-screen rich text editor application built with Next.js 16 and React 19. The application provides a sleek, distraction-free writing experience for creating articles with comprehensive formatting tools, metadata management, markdown export capabilities, and full GitHub integration for version control and file management.
+A comprehensive content management and writing platform built with Next.js 16 and React 19. The application provides a distraction-free writing experience for creating articles and managing videos with full GitHub integration, Contentstack export capabilities, AI-powered features, and more.
 
 ## Tech Stack
 
 ### Core Framework
-- **Next.js 16.0.0** - React framework with App Router
-- **React 19.0.0** - UI library
-- **TypeScript 5.6.0** - Type safety
+- **Next.js 16.0.10** - React framework with App Router
+- **React 19.2.1** - UI library
+- **TypeScript 5.9.3** - Type safety
 
 ### Rich Text Editor
-- **TipTap 2.8.0** - Headless rich text editor framework
+- **TipTap 2.27.1** - Headless rich text editor framework
   - `@tiptap/react` - React integration
   - `@tiptap/starter-kit` - Basic formatting (bold, italic, headings, lists, blockquote)
   - `@tiptap/extension-link` - Link support
@@ -21,65 +21,142 @@ A full-screen rich text editor application built with Next.js 16 and React 19. T
   - `@tiptap/extension-code-block-lowlight` - Code blocks with syntax highlighting
 
 ### Syntax Highlighting
-- **lowlight 3.1.0** - Code syntax highlighting (uses highlight.js)
+- **lowlight 3.3.0** - Code syntax highlighting (uses highlight.js)
 - Supported languages: JavaScript, TypeScript, CSS, HTML, JSON, Python, Bash, SQL
 
-### Markdown Export
-- **turndown 7.1.3** - HTML to Markdown conversion
-
-### GitHub Integration
-- **@octokit/rest 22.0.1** - GitHub REST API client
+### Markdown & Content Processing
+- **turndown 7.2.2** - HTML to Markdown conversion
 - **gray-matter 4.0.3** - YAML frontmatter parsing
 - **js-yaml 4.1.1** - YAML parsing and formatting
-- **diff 8.0.2** - Text diff generation
-- **remark** - Markdown to HTML conversion
+- **remark** - Markdown processing
   - `remark-parse` - Markdown parsing
   - `remark-rehype` - Markdown to HTML AST
   - `rehype-stringify` - HTML AST to string
+- **react-markdown 10.1.0** - React markdown renderer
+- **rehype-highlight 7.0.2** - Syntax highlighting for markdown
+
+### Integrations
+- **@octokit/rest 22.0.1** - GitHub REST API client
+- **openai 6.10.0** - OpenAI API client
+- **@google/generative-ai 0.24.1** - Google Gemini AI
+- **googleapis 167.0.0** - Google APIs (YouTube, Docs)
+- **cloudinary 2.8.0** - Cloudinary image management
+- **youtubei.js 16.0.1** - YouTube API client
+- **diff 8.0.2** - Text diff generation
 
 ### Styling
-- **Tailwind CSS 3.4.17** - Utility-first CSS framework
+- **Tailwind CSS 3.4.18** - Utility-first CSS framework
 - **Google Fonts** - JetBrains Mono for code blocks (via Next.js font optimization)
 
 ### Utilities
 - **clsx 2.1.1** - Conditional class names
+- **cheerio 1.1.2** - HTML parsing and manipulation
 
 ## Project Structure
 
 ```
 /app
-  /api/github
-    /check/route.ts      # Check file SHA for conflict detection
-    /connect/route.ts    # Test GitHub connection
-    /delete/route.ts     # Delete files from GitHub
-    /files/route.ts      # List markdown files with frontmatter
-    /load/route.ts       # Load file content and frontmatter
-    /save/route.ts       # Save/update files on GitHub
-  /article
-    - page.tsx           # Article editor page
-  /components
-    - Editor.tsx          # Main rich text editor component
-    - ArticleMetadata.tsx # Article metadata sidebar panel
-    - DiffView.tsx        # Diff visualization component
-    - HistoryPanel.tsx   # Commit history and version revert panel
-    - GitHubConfigPanel.tsx # GitHub config component (legacy)
-  /settings
-    - page.tsx           # GitHub settings page
-  /types
-    - github.ts          # GitHub-related TypeScript interfaces
-  /utils
-    - markdown.ts        # Markdown/frontmatter utilities
-  - layout.tsx           # Root layout with font configuration
-  - page.tsx             # Home page (articles list)
-  - globals.css          # Global styles including TipTap and syntax highlighting
+  /api
+    /articles          # Articles API endpoints (GET, POST, [slug])
+    /videos            # Videos API endpoints (GET, POST, [slug])
+    /github            # GitHub integration endpoints
+      /check           # Check file SHA for conflicts
+      /connect         # Test GitHub connection
+      /delete          # Delete files
+      /files           # List markdown files
+      /load            # Load file content
+      /save            # Save/update files
+      /history         # Get commit history
+      /revert          # Revert to previous version
+      /videos          # Video-specific GitHub operations
+    /contentstack      # Contentstack export endpoints
+      /assets          # Upload images
+      /entries         # Create/update entries
+      /taxonomies      # Manage taxonomies
+      /videos          # Video export endpoints
+    /openai            # OpenAI integration
+      /chat            # Chat completion
+      /stream          # Streaming responses
+      /generate-metadata # Generate article metadata
+      /generate-video-tags # Generate video tags
+    /youtube           # YouTube integration
+      /playlist-videos # Get playlist videos
+      /transcript      # Get video transcript
+    /google            # Google Docs export
+    /cloudinary        # Cloudinary image upload
+    /gemini            # Gemini AI image generation
+  /article             # Article editor page
+  /video               # Video editor page
+  /videos              # Videos list page
+  /settings            # Settings page
+  /components          # React components
+    /ui                # Reusable UI components (Modal, DeleteConfirmModal, ProgressBar)
+  /hooks               # Custom React hooks
+    - useGitHubConfig.ts
+    - useGitHubFiles.ts
+    - useGitHubVideos.ts
+    - usePlaylists.ts
+    - useCloudinaryWidget.ts
+  /types               # TypeScript type definitions
+    - github.ts
+    - video.ts
+  /utils               # Utility functions (DRY architecture)
+    - githubConfig.ts  # GitHub configuration parsing
+    - apiHelpers.ts    # API parameter parsing and response formatting
+    - fileFetcher.ts   # File fetching and batch processing
+    - cache.ts         # Caching utilities with purge support
+    - articleTransform.ts # Article transformation utilities
+    - videoTransform.ts  # Video transformation utilities
+    - markdown.ts      # Markdown/frontmatter utilities
+    - contentstackRte.ts # Contentstack RTE conversion
+    - helpers.ts       # General helper functions
+    - constants.ts     # Constants and configuration
+    - streamingHelpers.ts # Streaming response helpers
+    - toneInstructions.ts # AI tone instructions
 ```
+
+## Architecture Principles
+
+### DRY (Don't Repeat Yourself)
+The codebase follows DRY principles with shared utilities:
+
+1. **GitHub Configuration** (`app/utils/githubConfig.ts`)
+   - Centralized GitHub config parsing
+   - Environment variable handling
+   - Config validation
+   - Used by: Articles API, Videos API, GitHub routes
+
+2. **API Helpers** (`app/utils/apiHelpers.ts`)
+   - Query parameter parsing (pagination, sorting, filtering)
+   - Cache purge detection
+   - Error response formatting
+   - Success response formatting with cache headers
+   - Used by: All API routes
+
+3. **File Fetcher** (`app/utils/fileFetcher.ts`)
+   - Batch file processing (20 files at a time)
+   - Optimized fetching (download_url preferred)
+   - Markdown file filtering
+   - Frontmatter parsing
+   - Used by: Articles API, Videos API
+
+4. **Cache Utilities** (`app/utils/cache.ts`)
+   - Multi-level caching (file listings, processed content, individual files)
+   - Cache tag management
+   - Cache purge functions
+   - Used by: Articles API, Videos API, Save routes
+
+5. **Transformation Utilities**
+   - `articleTransform.ts` - Article to Contentstack format
+   - `videoTransform.ts` - Video to Contentstack format
+   - Shared filtering, sorting, pagination logic
 
 ## Key Features
 
 ### Editor Features
 1. **Text Formatting**
    - Style dropdown: Normal (p), Heading (h2), Subheading (h3)
-   - Bold, Italic
+   - Bold, Italic, Underline
    - Unordered lists, Ordered lists
    - Blockquote
    - Code blocks with syntax highlighting and language selection
@@ -110,6 +187,23 @@ A full-screen rich text editor application built with Next.js 16 and React 19. T
    - Preserves code block languages
    - Converts all editor content to markdown format
 
+### Video Management Features
+1. **Video Editor**
+   - Edit video metadata (title, description, date, position, tags, playlist)
+   - Edit video transcript
+   - YouTube video embedding
+   - Save to GitHub
+
+2. **Video Import**
+   - Import videos from YouTube playlists
+   - Batch import with progress tracking
+   - Automatic frontmatter generation
+
+3. **Bulk Operations**
+   - Bulk tag generation with AI
+   - Bulk export to Contentstack
+   - Video selection and filtering
+
 ### GitHub Integration Features
 1. **Repository Management**
    - Connect to GitHub repositories via Personal Access Token
@@ -120,9 +214,9 @@ A full-screen rich text editor application built with Next.js 16 and React 19. T
 2. **File Operations**
    - List markdown files from GitHub repository
    - Load files with frontmatter parsing
-   - Create new articles
-   - Save/update articles with commit messages
-   - Delete articles from GitHub
+   - Create new articles/videos
+   - Save/update articles/videos with commit messages
+   - Delete articles/videos from GitHub
    - Conflict detection (checks file SHA before saving)
 
 3. **Frontmatter Handling**
@@ -149,6 +243,7 @@ A full-screen rich text editor application built with Next.js 16 and React 19. T
    - Status indicators (saving, saved, error)
    - Last saved timestamp
    - Keyboard shortcut (Cmd/Ctrl+S)
+   - Automatic cache invalidation on save
 
 6. **History/Versioning**
    - View commit history for files
@@ -163,22 +258,62 @@ A full-screen rich text editor application built with Next.js 16 and React 19. T
    - Live updates in metadata panel
    - Can be manually overridden
 
-### UI/UX Patterns
-- Full-screen editor experience
-- Light mode only
-- **Header Bar**: Fixed position at top with file info, status indicators, and action buttons (Save, History, Settings)
-- **Menu Bar**: Fixed position toolbar with rich text formatting icons, always visible
-- **Scroll-based Header Behavior**:
-  - Header hides when scrolling down past threshold (100px)
-  - Header shows when scrolling up or near top (< 10px)
-  - Menu bar moves to top position (0px) when header hides
-  - Smooth transitions (300ms) for show/hide animations
-  - Dynamic padding on scroll container to prevent content overlap
-- Centered toolbar with icon-based buttons
-- Modal overlays for markdown preview, metadata panel, save confirmation, delete confirmation, history panel
-- Smooth transitions and hover states
-- Article cards with hover effects
-- Delete button appears on card hover
+### API Features
+
+#### Articles API (`/api/articles`)
+- **GET** - List articles with filtering, pagination, sorting
+  - Query params: `limit`, `offset`, `order`, `orderBy`, `tags`, `draft`, `purge`
+- **POST** - Same as GET but with body (allows config overrides)
+- **GET /api/articles/[slug]** - Get single article by slug/videoId/path
+- Returns Contentstack JSON format
+- Cached for 7 days (configurable via `?purge=true`)
+
+#### Videos API (`/api/videos`)
+- **GET** - List videos with filtering, pagination, sorting
+  - Query params: `limit`, `offset`, `order`, `orderBy`, `tags`, `playlist`, `purge`
+- **POST** - Same as GET but with body (allows config overrides)
+- **GET /api/videos/[slug]** - Get single video by videoId/path
+- Returns Contentstack JSON format
+- Cached for 7 days (configurable via `?purge=true`)
+
+### Contentstack Integration Features
+1. **Article Export**
+   - Export articles to Contentstack with full metadata
+   - Automatic taxonomy mapping
+   - Image upload to Contentstack assets
+   - JSON RTE conversion
+
+2. **Video Export**
+   - Export videos to Contentstack
+   - Playlist to category mapping
+   - Taxonomy management
+
+3. **Bulk Export**
+   - Export multiple articles/videos at once
+   - Rate-limited batch processing
+   - Progress tracking
+   - Detailed success/error reports
+
+### AI Features
+1. **OpenAI Integration**
+   - Chat completion
+   - Streaming responses
+   - Metadata generation
+   - Video tag generation
+   - Writing assistance
+
+2. **Gemini AI**
+   - Image generation prompts
+   - Image generation
+
+### Caching Strategy
+- **File listings**: Cached for 24 hours
+- **Processed content**: Cached for 7 days
+- **Individual files**: Cached for 7 days
+- **Cache purging**: 
+  - URL-based: `?purge=true` or `?purge=articles`/`?purge=videos`
+  - Automatic: Cache purged on save operations
+- **HTTP caching**: Client-side caching with `Cache-Control` headers
 
 ## Coding Conventions
 
@@ -187,6 +322,7 @@ A full-screen rich text editor application built with Next.js 16 and React 19. T
 - Prefer type imports: `import type { ... }`
 - Use interfaces for component props
 - Export types/interfaces when used across components
+- Avoid `any` types unless absolutely necessary
 
 ### React Patterns
 - Use functional components with hooks
@@ -234,42 +370,30 @@ export default function Component({ ... }: ComponentProps) {
 - Modal overlays: `fixed inset-0 bg-black/20 z-40`
 - Modal content: `fixed inset-0 z-50 flex items-center justify-center`
 
-### TipTap Patterns
-- Use `useEditor` hook for editor initialization
-- Access editor via `editor` variable (not destructured)
-- Use chain API: `editor.chain().focus().command().run()`
-- Check active state: `editor.isActive("nodeType")`
-- Check capabilities: `editor.can().undo()`
-- Get HTML: `editor.getHTML()`
-- Get JSON: `editor.getJSON()`
-
-### Icon Components
-- Define SVG icons as functional components
-- Use consistent sizing: `w-5 h-5` for toolbar icons, `w-6 h-6` for larger icons
-- Use `stroke="currentColor"` for stroke-based icons
-- Include `viewBox="0 0 24 24"` for consistent scaling
-
-### Code Block Handling
-- Use `CodeBlockLowlight` extension (not default codeBlock)
-- Register languages with lowlight instance
-- Extract language from JSON structure for markdown export
-- Format code blocks using custom `formatCode` utility
-- Handle paste events to auto-format code
-
-### Markdown Export
-- Use TurndownService for HTML to Markdown conversion
-- Configure custom rules for code blocks with language preservation
-- Extract language from TipTap JSON structure
-- Add `data-language` attribute to code elements before conversion
+### API Route Patterns
+- Use shared utilities from `app/utils/`:
+  - `getGitHubConfig()` - GitHub config parsing
+  - `parsePaginationParams()` - Pagination parsing
+  - `parseSortParams()` - Sort parsing
+  - `parseTags()` - Tags parsing
+  - `shouldPurgeCache()` - Cache purge detection
+  - `createSuccessResponse()` - Success response with cache headers
+  - `handleApiError()` - Error response formatting
+- Return consistent response format: `{ success: boolean, error?: string, ... }`
+- Handle errors gracefully (404, 409 conflicts, 403 permissions)
+- Use caching where appropriate
+- Add cache purge support via query parameter
 
 ### GitHub API Patterns
 - All GitHub API routes are in `/app/api/github/`
 - Use POST requests for all operations
-- Validate required fields (repo, branch, token, etc.)
+- Validate required fields using `validateGitHubFields()` from `app/api/github/utils.ts`
+- Use `parseRepo()` from `app/api/github/utils.ts` for repo parsing
 - Handle errors gracefully (404, 409 conflicts, 403 permissions)
 - Return consistent response format: `{ success: boolean, error?: string, ... }`
 - Use Octokit for GitHub API calls
 - Include SHA for optimistic locking on updates/deletes
+- Purge cache after save operations
 
 ### Frontmatter Handling
 - Use `gray-matter` to parse frontmatter from markdown files
@@ -297,6 +421,26 @@ export default function Component({ ... }: ComponentProps) {
 - Only auto-generate for new articles (`isNewFile === true`)
 - Track auto-generated slugs to allow manual overrides
 - Live update slug field when title changes (for new articles only)
+
+### Caching Patterns
+- Use `getCachedProcessedData()` for processed content (articles/videos)
+- Use `getCachedFileListing()` for GitHub file listings
+- Use `getCachedFileContent()` for individual files
+- Create cache keys using utility functions:
+  - `createArticlesCacheKey()`
+  - `createVideosCacheKey()`
+  - `createRepoCacheKey()`
+  - `createFileCacheKey()`
+- Purge cache using:
+  - `purgeArticlesCache()` - After article save
+  - `purgeVideosCache()` - After video save
+  - `purgeAllCache()` - Purge everything
+
+### File Fetching Patterns
+- Use `processFilesInBatches()` for batch processing (20 files at a time)
+- Use `fetchFileContent()` for optimized file fetching (download_url preferred)
+- Use `filterMarkdownFiles()` to filter markdown files
+- Use `parseFrontmatter()` to parse frontmatter
 
 ## Important Notes
 
@@ -333,7 +477,11 @@ export default function Component({ ... }: ComponentProps) {
 ### Route Structure
 - `/` - Home page (articles list)
 - `/article` - Article editor page
+- `/video` - Video editor page
+- `/videos` - Videos list page
 - `/settings` - GitHub settings page
+- `/api/articles` - Articles API
+- `/api/videos` - Videos API
 - `/api/github/*` - GitHub API routes
 
 ### File Operations
@@ -348,129 +496,71 @@ export default function Component({ ... }: ComponentProps) {
 - Use SHA for optimistic locking
 - Periodic status checks for remote changes
 
-## File-Specific Guidelines
-
-### Editor.tsx
-- Main editor component (~2200 lines)
-- Contains MenuBar component (toolbar)
-- Manages editor instance and article metadata
-- Handles markdown export
-- Handles GitHub file operations (load, save)
-- Contains icon components (BoldIcon, ItalicIcon, etc.)
-- Contains code formatting utilities
-- Manages save modal with diff view
-- Handles keyboard shortcuts (Cmd/Ctrl+S)
-- **Scroll-based header visibility**: Uses callback ref pattern for scroll detection
-- **Fixed positioning**: Header and menu bar use `fixed` positioning relative to viewport
-- **Constants**: HEADER_HEIGHT (57px), MENUBAR_HEIGHT (57px), SCROLL_THRESHOLD (100px), TOP_THRESHOLD (10px)
-- **History Panel**: Integrates HistoryPanel component for commit history and version revert
-
-### ArticleMetadata.tsx
-- Sidebar panel component
-- Manages article metadata form
-- Syncs with Editor component state
-- Exports `ArticleMetadata` interface
-- Handles auto-slug generation for new files
-- Manages tags and FAQs arrays
-
-### page.tsx (Home)
-- Articles list page
-- GitHub configuration loading
-- File listing and filtering
-- Tag filtering sidebar
-- Search and sort functionality
-- Delete functionality with confirmation
-- Article card grid layout
-
-### settings/page.tsx
-- GitHub configuration form
-- Connection testing
-- Config save/clear
-- Redirects to home after save
-
-### DiffView.tsx
-- Displays line-by-line diff
-- Uses `diff` library
-- Shows added/removed lines with colors
-
-### HistoryPanel.tsx
-- Side panel component for commit history
-- Displays commit list with SHA, message, author, date
-- Allows viewing content of previous commits
-- Provides revert functionality
-- Uses GitHub API routes `/api/github/history` and `/api/github/revert`
-- Accessible via history button in editor header
-
-### markdown.ts
-- `markdownToHtml`: Converts markdown to HTML
-- `mapFrontmatterToMetadata`: Maps frontmatter to ArticleMetadata
-- `updateFrontmatter`: Updates existing frontmatter preserving structure
-- `metadataToFrontmatter`: Creates new frontmatter for new files
-- `combineFrontmatterAndContent`: Combines frontmatter and content
-
-### API Routes
-- All routes use POST method
-- Validate inputs
-- Handle errors consistently
-- Return `{ success: boolean, error?: string, ... }`
-- Use Octokit for GitHub operations
-- `/api/github/history` - Fetch commit history for a file
-- `/api/github/revert` - Revert file to a specific commit
-
-## Development Workflow
-
-### Running the Project
-```bash
-npm run dev      # Development server
-npm run build    # Production build
-npm run start    # Start production server
-npm run lint     # Run ESLint
-```
-
-### Adding New Features
-1. Follow existing component patterns
-2. Use TypeScript interfaces for props
-3. Maintain consistent styling with Tailwind
-4. Test with Next.js build (`npm run build`)
-5. Ensure SSR compatibility (check for `typeof window !== "undefined"`)
-
-### Adding TipTap Extensions
-1. Install package: `npm install @tiptap/extension-name`
-2. Import in Editor.tsx
-3. Add to `useEditor` extensions array
-4. Add toolbar button if needed
-5. Style in globals.css if necessary
-
-### Adding Code Languages
-1. Import language from highlight.js
-2. Register with lowlight instance
-3. Add to CODE_LANGUAGES array
-4. Update language dropdown
-
-### Adding GitHub API Routes
-1. Create route file in `/app/api/github/[endpoint]/route.ts`
-2. Export POST function
-3. Validate inputs
-4. Use Octokit for GitHub operations
-5. Return consistent response format
-6. Handle errors appropriately
-
 ## Best Practices
 
-1. **Always use TypeScript** - No `any` types unless absolutely necessary (e.g., Turndown node types)
-2. **Client Components** - Mark components with `"use client"` when using hooks or browser APIs
-3. **Accessibility** - Include `aria-label` and `title` attributes on buttons
-4. **Error Handling** - Handle image load errors gracefully, show user-friendly error messages
-5. **Performance** - Use Next.js font optimization for custom fonts
-6. **Code Quality** - Run `npm run build` before committing to catch TypeScript errors
-7. **Consistency** - Follow existing patterns for similar features
-8. **UX** - Provide visual feedback for all interactions (hover, active, disabled states)
-9. **Confirmation Dialogs** - Use modals for destructive actions (delete, etc.)
-10. **Loading States** - Show loading indicators for async operations
-11. **Error States** - Display clear error messages to users
-12. **Frontmatter Preservation** - Always preserve original frontmatter structure and formatting
+1. **Always use TypeScript** - No `any` types unless absolutely necessary
+2. **Use shared utilities** - Don't duplicate code, use utilities from `app/utils/`
+3. **Client Components** - Mark components with `"use client"` when using hooks or browser APIs
+4. **Accessibility** - Include `aria-label` and `title` attributes on buttons
+5. **Error Handling** - Handle errors gracefully, show user-friendly error messages
+6. **Performance** - Use Next.js font optimization for custom fonts
+7. **Code Quality** - Run `npm run build` before committing to catch TypeScript errors
+8. **Consistency** - Follow existing patterns for similar features
+9. **UX** - Provide visual feedback for all interactions (hover, active, disabled states)
+10. **Confirmation Dialogs** - Use modals for destructive actions (delete, etc.)
+11. **Loading States** - Show loading indicators for async operations
+12. **Error States** - Display clear error messages to users
+13. **Frontmatter Preservation** - Always preserve original frontmatter structure and formatting
+14. **Caching** - Use caching for expensive operations, purge on updates
+15. **DRY** - Don't repeat code, extract to shared utilities
 
 ## Common Patterns
+
+### API Route with Caching
+```typescript
+import { NextRequest } from "next/server";
+import { getGitHubConfig, isConfigError } from "../../utils/githubConfig";
+import { parsePaginationParams, parseSortParams, parseTags, shouldPurgeCache, createSuccessResponse, handleApiError } from "../../utils/apiHelpers";
+import { purgeArticlesCache } from "../../utils/cache";
+
+export async function GET(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams;
+
+    // Handle cache purge
+    if (shouldPurgeCache(searchParams, "articles")) {
+      await purgeArticlesCache();
+    }
+
+    // Parse parameters
+    const { limit, offset } = parsePaginationParams(searchParams);
+    const { order, orderBy } = parseSortParams(searchParams, "date");
+    const tags = parseTags(searchParams);
+
+    // Get GitHub config
+    const config = getGitHubConfig();
+    if (isConfigError(config)) {
+      return handleApiError({ status: 500, message: config.error }, "Configuration error", {
+        articles: [],
+        total: 0,
+        limit,
+        offset,
+      });
+    }
+
+    // ... fetch and process data ...
+
+    return createSuccessResponse({ articles, total, limit, offset });
+  } catch (error: any) {
+    return handleApiError(error, "Failed to fetch articles", {
+      articles: [],
+      total: 0,
+      limit: 10,
+      offset: 0,
+    });
+  }
+}
+```
 
 ### Button with Active State
 ```typescript
@@ -510,35 +600,6 @@ useEffect(() => {
 }, [propValue]);
 ```
 
-### GitHub API Route Pattern
-```typescript
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { repo, branch, token, ... } = body;
-    
-    if (!repo || !branch || !token) {
-      return NextResponse.json(
-        { success: false, error: "Missing required fields" },
-        { status: 400 }
-      );
-    }
-    
-    const [owner, repoName] = repo.split("/");
-    const octokit = new Octokit({ auth: token });
-    
-    // ... operation
-    
-    return NextResponse.json({ success: true, ... });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
-  }
-}
-```
-
 ### Loading localStorage Config
 ```typescript
 useEffect(() => {
@@ -560,69 +621,70 @@ useEffect(() => {
 }, []);
 ```
 
-### Scroll-Based Header Visibility Pattern
-```typescript
-// Constants for scroll behavior
-const HEADER_HEIGHT = 57;
-const MENUBAR_HEIGHT = 57;
-const SCROLL_THRESHOLD = 100;
-const TOP_THRESHOLD = 10;
+## Development Workflow
 
-// State and refs
-const [isHeaderVisible, setIsHeaderVisible] = useState(true);
-const lastScrollYRef = useRef(0);
-const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-// Scroll handler creation
-const createScrollHandler = (element: HTMLDivElement) => {
-  return () => {
-    const currentScrollY = element.scrollTop;
-    const lastScrollY = lastScrollYRef.current;
-
-    if (currentScrollY < TOP_THRESHOLD) {
-      setIsHeaderVisible(true);
-    } else if (currentScrollY < lastScrollY) {
-      setIsHeaderVisible(true);
-    } else if (currentScrollY > lastScrollY && currentScrollY > SCROLL_THRESHOLD) {
-      setIsHeaderVisible(false);
-    }
-
-    lastScrollYRef.current = currentScrollY;
-  };
-};
-
-// Callback ref to attach listener when element is ready
-const setScrollContainerRef = (element: HTMLDivElement | null) => {
-  scrollContainerRef.current = element;
-  if (element) {
-    const handleScroll = createScrollHandler(element);
-    element.addEventListener("scroll", handleScroll, { passive: true });
-    (element as any).__scrollHandler = handleScroll;
-  }
-};
-
-// Fixed header positioning
-<header className="fixed top-0 left-0 right-0 z-30 transition-transform duration-300">
-  {/* Header content */}
-</header>
-
-// Fixed menu bar with dynamic top position
-<div
-  className="fixed left-0 right-0 z-20 transition-all duration-300"
-  style={{ top: isHeaderVisible ? `${HEADER_HEIGHT}px` : "0px" }}
->
-  <MenuBar />
-</div>
-
-// Scroll container with dynamic padding
-<div
-  ref={setScrollContainerRef}
-  style={{
-    paddingTop: isHeaderVisible
-      ? `${HEADER_HEIGHT + MENUBAR_HEIGHT}px`
-      : `${MENUBAR_HEIGHT}px`,
-  }}
->
-  {/* Content */}
-</div>
+### Running the Project
+```bash
+npm run dev      # Development server
+npm run build    # Production build
+npm run start    # Start production server
+npm run lint     # Run ESLint
 ```
+
+### Adding New Features
+1. Follow existing component patterns
+2. Use TypeScript interfaces for props
+3. Maintain consistent styling with Tailwind
+4. Use shared utilities where possible
+5. Test with Next.js build (`npm run build`)
+6. Ensure SSR compatibility (check for `typeof window !== "undefined"`)
+
+### Adding TipTap Extensions
+1. Install package: `npm install @tiptap/extension-name`
+2. Import in Editor.tsx
+3. Add to `useEditor` extensions array
+4. Add toolbar button if needed
+5. Style in globals.css if necessary
+
+### Adding Code Languages
+1. Import language from highlight.js
+2. Register with lowlight instance
+3. Add to CODE_LANGUAGES array
+4. Update language dropdown
+
+### Adding GitHub API Routes
+1. Create route file in `/app/api/github/[endpoint]/route.ts`
+2. Export POST function
+3. Use `validateGitHubFields()` and `parseRepo()` from utils
+4. Use Octokit for GitHub operations
+5. Return consistent response format
+6. Handle errors appropriately
+7. Purge cache if modifying files
+
+### Adding New API Endpoints
+1. Use shared utilities from `app/utils/`
+2. Follow existing API patterns
+3. Add caching where appropriate
+4. Add cache purge support
+5. Use consistent error handling
+6. Document query parameters and response format
+
+## Environment Variables
+
+Required:
+- `GITHUB_TOKEN` - GitHub Personal Access Token
+- `GITHUB_REPO` - Repository in format `owner/repo`
+
+Optional:
+- `GITHUB_BRANCH` - Branch name (default: `main`)
+- `GITHUB_FOLDER` - Articles folder path
+- `GITHUB_VIDEOS_FOLDER` - Videos folder path (default: `content/3.videos`)
+- `GITHUB_AUTHOR_NAME` - Commit author name
+- `GITHUB_AUTHOR_EMAIL` - Commit author email
+- `OPENAI_API_KEY` - OpenAI API key
+- `CONTENTSTACK_API_KEY` - Contentstack API key
+- `CONTENTSTACK_MANAGEMENT_TOKEN` - Contentstack management token
+- `CONTENTSTACK_REGION` - Contentstack region (`eu`, `us`, etc.)
+- `CLOUDINARY_CLOUD_NAME` - Cloudinary cloud name
+- `CLOUDINARY_API_KEY` - Cloudinary API key
+- `CLOUDINARY_API_SECRET` - Cloudinary API secret

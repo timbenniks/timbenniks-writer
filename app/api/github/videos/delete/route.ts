@@ -32,61 +32,17 @@ export async function POST(request: NextRequest) {
     if (repoResult instanceof NextResponse) {
       return repoResult;
     }
-    const { owner, repoName } = repoResult;
-    const { branch, filePath, sha, commitMessage, videoTitle } = body;
-
-    // Initialize Octokit
-    const octokit = new Octokit({
-      auth: token,
+    const { filePath, sha, commitMessage, videoTitle } = body;
+    
+    // Always stage deletions - no immediate commits
+    // Return success response indicating the deletion should be staged client-side
+    return NextResponse.json({
+      success: true,
+      staged: true,
+      filePath,
+      sha,
+      message: "Deletion staged successfully",
     });
-
-    // Get author info from environment
-    const authorName = process.env.GITHUB_AUTHOR_NAME || "Tim Benniks Writer";
-    const authorEmail =
-      process.env.GITHUB_AUTHOR_EMAIL || "noreply@timbenniks.dev";
-
-    try {
-      await octokit.repos.deleteFile({
-        owner,
-        repo: repoName,
-        path: filePath,
-        message:
-          commitMessage || `Delete video: ${videoTitle || filePath}`,
-        sha,
-        branch,
-        author: {
-          name: authorName,
-          email: authorEmail,
-        },
-      });
-
-      return NextResponse.json({
-        success: true,
-        filePath,
-        deleted: true,
-      });
-    } catch (error: any) {
-      // Handle file not found
-      if (error.status === 404) {
-        return NextResponse.json(
-          { success: false, error: "File not found or already deleted" },
-          { status: 404 }
-        );
-      }
-      // Handle conflict (SHA mismatch)
-      if (error.status === 409) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Conflict: The file has been modified. Please refresh and try again.",
-            conflict: true,
-          },
-          { status: 409 }
-        );
-      }
-      throw error;
-    }
   } catch (error: any) {
     console.error("GitHub video delete error:", error);
     return NextResponse.json(

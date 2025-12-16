@@ -116,8 +116,8 @@ export default function BulkContentstackExportModal({
       for (const tag of tags) {
         const termUid = tag
           .toLowerCase()
-          .replace(/\s+/g, "-")
-          .replace(/[^a-z0-9-]/g, "");
+          .replace(/\s+/g, "_")
+          .replace(/[^a-z0-9_]/g, "");
 
         // Try to create the term (will succeed or indicate it exists)
         await fetch("/api/contentstack/taxonomy-term", {

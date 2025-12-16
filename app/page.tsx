@@ -14,9 +14,11 @@ import {
   BUTTON_SECONDARY_CLASSES,
 } from "./utils/constants";
 import { deleteGitHubFile } from "./utils/api";
+import { stageDeleteChange, stageArticleChange } from "./utils/staging";
 import DeleteConfirmModal from "./components/ui/DeleteConfirmModal";
 import BulkContentstackExportModal from "./components/BulkContentstackExportModal";
 import AppHeader from "./components/AppHeader";
+import StagingPanel from "./components/StagingPanel";
 
 export default function Home() {
   const router = useRouter();
@@ -31,6 +33,13 @@ export default function Home() {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [isBulkExportOpen, setIsBulkExportOpen] = useState(false);
+  const [isBulkGeneratingTags, setIsBulkGeneratingTags] = useState(false);
+  const [bulkTagProgress, setBulkTagProgress] = useState({
+    current: 0,
+    total: 0,
+    currentArticle: "",
+    status: "",
+  });
 
   const handleFileClick = (file: GitHubFile) => {
     // Navigate to editor with file info
@@ -48,22 +57,19 @@ export default function Home() {
     setIsDeleting(true);
 
     try {
-      const data = await deleteGitHubFile(
-        githubConfig,
-        deleteFile.path,
-        deleteFile.sha,
-        deleteFile.name
-      );
-
-      if (!data.success) {
-        throw new Error(data.error || "Failed to delete file");
-      }
+      // Always stage deletions - no immediate commits
+      stageDeleteChange({
+        filePath: deleteFile.path,
+        sha: deleteFile.sha,
+        title: deleteFile.name,
+        commitMessage: `Delete article: ${deleteFile.name}`,
+      });
 
       setFiles((prev) => prev.filter((f) => f.sha !== deleteFile.sha));
       setDeleteFile(null);
     } catch (error: any) {
       console.error("Failed to delete file:", error);
-      setError(error.message || "Failed to delete file from GitHub");
+      setError(error.message || "Failed to stage deletion");
       setDeleteFile(null);
     } finally {
       setIsDeleting(false);
@@ -158,6 +164,161 @@ export default function Home() {
     return filteredFiles.filter((f) => selectedFiles.has(f.sha));
   };
 
+  // Bulk generate tags using AI
+  const bulkGenerateTagsWithAI = async () => {
+    if (!githubConfig || selectedFiles.size === 0) return;
+
+    const selectedFilesList = files.filter((f) => selectedFiles.has(f.sha));
+    setIsBulkGeneratingTags(true);
+    setBulkTagProgress({
+      current: 0,
+      total: selectedFilesList.length,
+      currentArticle: "",
+      status: "",
+    });
+
+    const updatedFiles: GitHubFile[] = [];
+    const errors: string[] = [];
+
+    for (let i = 0; i < selectedFilesList.length; i++) {
+      const file = selectedFilesList[i];
+
+      setBulkTagProgress({
+        current: i + 1,
+        total: selectedFilesList.length,
+        currentArticle: file.frontmatter?.title || file.name,
+        status: "loading",
+      });
+
+      try {
+        // Step 1: Load file content from GitHub
+        const loadResponse = await fetch("/api/github/load", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            repo: githubConfig.repo,
+            branch: githubConfig.branch,
+            filePath: file.path,
+          }),
+        });
+
+        const loadData = await loadResponse.json();
+        if (!loadData.success) {
+          errors.push(`${file.name}: Failed to load content`);
+          continue;
+        }
+
+        setBulkTagProgress((prev) => ({ ...prev, status: "generating" }));
+
+        // Step 2: Generate tags using AI
+        const tagsResponse = await fetch("/api/openai/generate-article-tags", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: file.frontmatter?.title || "",
+            description: file.frontmatter?.description || "",
+            content: loadData.content || "", // Markdown content
+          }),
+        });
+
+        const tagsData = await tagsResponse.json();
+
+        if (!tagsData.success || !tagsData.tags) {
+          errors.push(`${file.name}: Failed to generate tags`);
+          continue;
+        }
+
+        // Step 3: Always stage changes
+        setBulkTagProgress((prev) => ({ ...prev, status: "saving" }));
+
+        const updatedFrontmatter = {
+          ...file.frontmatter,
+          tags: tagsData.tags,
+        };
+
+        // Build file content for staging
+        const yaml = require("js-yaml");
+        const frontmatterData: any = {
+          date: updatedFrontmatter.date || "",
+          title: updatedFrontmatter.title || "",
+          description: updatedFrontmatter.description || "",
+          slug: updatedFrontmatter.slug || "",
+          image: updatedFrontmatter.heroImage || "",
+          tags: updatedFrontmatter.tags || [],
+        };
+
+        if (updatedFrontmatter.readingTime) {
+          frontmatterData.reading_time = updatedFrontmatter.readingTime;
+        }
+        if (updatedFrontmatter.draft !== undefined) {
+          frontmatterData.draft = updatedFrontmatter.draft;
+        }
+
+        const yamlContent = yaml.dump(frontmatterData, {
+          lineWidth: -1,
+          noRefs: true,
+          sortKeys: false,
+          quotingType: '"',
+          forceQuotes: false,
+        });
+
+        const fileContent = `---\n${yamlContent}---\n\n${loadData.content || ""}`;
+
+        // Always stage the change
+        stageArticleChange({
+          filePath: file.path,
+          content: fileContent,
+          sha: file.sha || undefined,
+          isNew: false,
+          title: updatedFrontmatter.title,
+          commitMessage: `Update tags for article: ${updatedFrontmatter.title}`,
+        });
+
+        // Track as updated for local state
+        updatedFiles.push({
+          ...file,
+          frontmatter: updatedFrontmatter,
+        });
+
+        // Small delay between articles to avoid rate limiting
+        if (i < selectedFilesList.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000)); // Longer delay for OpenAI
+        }
+      } catch (err: any) {
+        errors.push(`${file.name}: ${err.message || "Unknown error"}`);
+      }
+    }
+
+    // Update local state with new data
+    if (updatedFiles.length > 0) {
+      setFiles((prev) => {
+        // Create a map of updated files by path for quick lookup
+        const updatedMap = new Map(
+          updatedFiles.map((f) => [f.path, f])
+        );
+
+        // Filter out files that were updated, then add the updated versions
+        const filtered = prev.filter((f) => !updatedMap.has(f.path));
+
+        return [...filtered, ...updatedFiles];
+      });
+    }
+
+    setIsBulkGeneratingTags(false);
+    setBulkTagProgress({
+      current: 0,
+      total: 0,
+      currentArticle: "",
+      status: "",
+    });
+
+    if (errors.length > 0) {
+      setError(`Some articles failed: ${errors.join(", ")}`);
+    }
+
+    exitSelectionMode();
+  };
+
   // Header actions
   const headerActions = (
     <>
@@ -187,6 +348,20 @@ export default function Home() {
                 )}
               >
                 Export to Contentstack
+              </button>
+              <button
+                onClick={bulkGenerateTagsWithAI}
+                disabled={selectedFiles.size === 0 || isBulkGeneratingTags}
+                className={clsx(
+                  "px-4 py-2 text-sm font-medium rounded-md transition-colors",
+                  selectedFiles.size === 0 || isBulkGeneratingTags
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+                )}
+              >
+                {isBulkGeneratingTags
+                  ? `Generating... (${bulkTagProgress.current}/${bulkTagProgress.total})`
+                  : "Generate Tags with AI"}
               </button>
               <button
                 onClick={exitSelectionMode}
@@ -221,12 +396,23 @@ export default function Home() {
         </>
       )}
       {!isSelectionMode && (
-        <button
-          onClick={() => router.push("/article?new=true")}
-          className={BUTTON_SECONDARY_CLASSES}
-        >
-          New Article
-        </button>
+        <>
+          {githubConfig && (
+            <StagingPanel
+              githubConfig={githubConfig}
+              onCommit={() => {
+                // Reload articles after commit
+                loadFiles();
+              }}
+            />
+          )}
+          <button
+            onClick={() => router.push("/article?new=true")}
+            className={BUTTON_SECONDARY_CLASSES}
+          >
+            New Article
+          </button>
+        </>
       )}
     </>
   );
@@ -245,7 +431,7 @@ export default function Home() {
       />
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="w-full px-8 py-8">
         {configLoading ? (
           /* Loading Config State */
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
@@ -271,7 +457,7 @@ export default function Home() {
         ) : files.length > 0 ? (
           <div className="flex gap-8">
             {/* Sidebar */}
-            <aside className="w-64 flex-shrink-0">
+            <aside className="w-72 flex-shrink-0">
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sticky top-4">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">
                   Filters
@@ -322,7 +508,7 @@ export default function Home() {
             <div className="flex-1 min-w-0">
               {/* Search and Sort */}
               <div className="mb-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <div className="flex-1 max-w-md">
+                <div className="flex-1 max-w-lg">
                   <label htmlFor="search-articles" className="sr-only">
                     Search articles
                   </label>
@@ -375,7 +561,7 @@ export default function Home() {
 
               {/* Article Grid */}
               {!isLoading && filteredFiles.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
                   {filteredFiles.map((file) => (
                     <article
                       key={file.sha}

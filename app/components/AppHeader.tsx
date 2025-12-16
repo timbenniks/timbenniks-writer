@@ -15,14 +15,31 @@ export default function AppHeader({ actions, subtitle }: AppHeaderProps) {
   const pathname = usePathname();
 
   const navItems = [
-    { href: "/", label: "Articles", matches: (p: string) => p === "/" || p.startsWith("/article") },
-    { href: "/videos", label: "Videos", matches: (p: string) => p.startsWith("/videos") || p.startsWith("/video") },
-    { href: "/settings", label: "Settings", matches: (p: string) => p.startsWith("/settings") },
+    {
+      href: "/",
+      label: "Articles",
+      matches: (p: string) => p === "/" || p.startsWith("/article"),
+    },
+    {
+      href: "/videos",
+      label: "Videos",
+      matches: (p: string) => p.startsWith("/videos") || p.startsWith("/video"),
+    },
+    {
+      href: "/contentstack/taxonomy",
+      label: "Taxonomy",
+      matches: (p: string) => p.startsWith("/contentstack/taxonomy"),
+    },
+    {
+      href: "/settings",
+      label: "Settings",
+      matches: (p: string) => p.startsWith("/settings"),
+    },
   ];
 
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-4">
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full">
         <div className="flex items-center justify-between">
           {/* Left side: Navigation */}
           <div className="flex items-center gap-8">
@@ -44,12 +61,15 @@ export default function AppHeader({ actions, subtitle }: AppHeaderProps) {
                 </svg>
               </div>
               <span className="font-semibold text-gray-900 hidden sm:inline">
-                Writer
+                Turbo Content
               </span>
             </Link>
 
             {/* Navigation Tabs */}
-            <nav className="flex items-center gap-1" aria-label="Main navigation">
+            <nav
+              className="flex items-center gap-1"
+              aria-label="Main navigation"
+            >
               {navItems.map((item) => {
                 const isActive = item.matches(pathname);
                 return (
@@ -72,17 +92,12 @@ export default function AppHeader({ actions, subtitle }: AppHeaderProps) {
           </div>
 
           {/* Right side: Actions */}
-          {actions && (
-            <div className="flex items-center gap-3">{actions}</div>
-          )}
+          {actions && <div className="flex items-center gap-3">{actions}</div>}
         </div>
 
         {/* Optional subtitle row */}
-        {subtitle && (
-          <p className="text-sm text-gray-600 mt-2">{subtitle}</p>
-        )}
+        {subtitle && <p className="text-sm text-gray-600 mt-2">{subtitle}</p>}
       </div>
     </header>
   );
 }
-

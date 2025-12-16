@@ -48,7 +48,11 @@ export default function ContentstackExportModal({
   useEffect(() => {
     if (isOpen) {
       setSteps([
-        { id: "check", label: "Checking for existing entry", status: "pending" },
+        {
+          id: "check",
+          label: "Checking for existing entry",
+          status: "pending",
+        },
         { id: "taxonomies", label: "Processing tags", status: "pending" },
         { id: "image", label: "Uploading thumbnail", status: "pending" },
         { id: "content", label: "Converting content", status: "pending" },
@@ -63,14 +67,9 @@ export default function ContentstackExportModal({
     }
   }, [isOpen]);
 
-  const updateStep = (
-    stepId: string,
-    updates: Partial<ExportStep>
-  ) => {
+  const updateStep = (stepId: string, updates: Partial<ExportStep>) => {
     setSteps((prev) =>
-      prev.map((step) =>
-        step.id === stepId ? { ...step, ...updates } : step
-      )
+      prev.map((step) => (step.id === stepId ? { ...step, ...updates } : step))
     );
   };
 
@@ -81,7 +80,7 @@ export default function ContentstackExportModal({
     try {
       // Step 1: Check for existing entry
       updateStep("check", { status: "in_progress" });
-      
+
       const url = articleMetadata.slug.startsWith("/writing/")
         ? articleMetadata.slug
         : `/writing/${articleMetadata.slug}`;
@@ -96,9 +95,11 @@ export default function ContentstackExportModal({
       });
 
       const checkData = await checkResponse.json();
-      
+
       if (!checkResponse.ok) {
-        throw new Error(checkData.error || "Failed to check for existing entry");
+        throw new Error(
+          checkData.error || "Failed to check for existing entry"
+        );
       }
 
       let entryUid: string | null = null;
@@ -110,13 +111,17 @@ export default function ContentstackExportModal({
           detail: `Found existing entry: ${checkData.entry.title}`,
         });
       } else {
-        updateStep("check", { status: "completed", detail: "Creating new entry" });
+        updateStep("check", {
+          status: "completed",
+          detail: "Creating new entry",
+        });
       }
 
       // Step 2: Process taxonomies
       updateStep("taxonomies", { status: "in_progress" });
-      
-      const taxonomyRefs: Array<{ taxonomy_uid: string; term_uid: string }> = [];
+
+      const taxonomyRefs: Array<{ taxonomy_uid: string; term_uid: string }> =
+        [];
       const tags = articleMetadata.tags || [];
 
       // First, get existing terms
@@ -128,8 +133,11 @@ export default function ContentstackExportModal({
 
       // Process each tag
       for (let i = 0; i < tags.length; i++) {
-        const tag = tags[i].toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-        
+        const tag = tags[i]
+          .toLowerCase()
+          .replace(/\s+/g, "_")
+          .replace(/[^a-z0-9_]/g, "");
+
         updateStep("taxonomies", {
           status: "in_progress",
           detail: `Processing tag ${i + 1}/${tags.length}: ${tags[i]}`,
@@ -137,19 +145,25 @@ export default function ContentstackExportModal({
 
         if (!existingTerms.has(tag)) {
           // Create the term
-          const createResponse = await fetch("/api/contentstack/taxonomy-term", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              termUid: tag,
-              termName: tags[i],
-            }),
-          });
+          const createResponse = await fetch(
+            "/api/contentstack/taxonomy-term",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                termUid: tag,
+                termName: tags[i],
+              }),
+            }
+          );
 
           const createData = await createResponse.json();
-          
+
           if (!createResponse.ok && !createData.alreadyExists) {
-            console.warn(`Failed to create taxonomy term: ${tag}`, createData.error);
+            console.warn(
+              `Failed to create taxonomy term: ${tag}`,
+              createData.error
+            );
             // Continue anyway - the term might already exist with different casing
           }
         }
@@ -170,32 +184,37 @@ export default function ContentstackExportModal({
 
       // Step 3: Upload thumbnail
       updateStep("image", { status: "in_progress" });
-      
+
       let thumbnailUid: string | null = null;
       const heroImage = articleMetadata.heroImage || articleMetadata.image;
 
       if (heroImage) {
         // Get or create the "articles" folder
         updateStep("image", { detail: "Checking for articles folder..." });
-        
+
         let folderUid: string | null = null;
-        
+
         // First, try to find existing folder
-        const folderResponse = await fetch("/api/contentstack/folders?name=articles");
+        const folderResponse = await fetch(
+          "/api/contentstack/folders?name=articles"
+        );
         const folderData = await folderResponse.json();
-        
+
         if (folderData.success && folderData.folder?.uid) {
           folderUid = folderData.folder.uid;
         } else {
           // Create the folder
           updateStep("image", { detail: "Creating articles folder..." });
-          const createFolderResponse = await fetch("/api/contentstack/folders", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: "articles" }),
-          });
+          const createFolderResponse = await fetch(
+            "/api/contentstack/folders",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: "articles" }),
+            }
+          );
           const createFolderData = await createFolderResponse.json();
-          
+
           if (createFolderData.success && createFolderData.folder?.uid) {
             folderUid = createFolderData.folder.uid;
           }
@@ -238,9 +257,9 @@ export default function ContentstackExportModal({
 
       // Step 4: Convert content to JSON RTE
       updateStep("content", { status: "in_progress" });
-      
+
       const jsonRteContent = htmlToContentstackRte(articleHtml);
-      
+
       updateStep("content", {
         status: "completed",
         detail: `Converted ${jsonRteContent.children.length} content blocks`,
@@ -317,27 +336,35 @@ export default function ContentstackExportModal({
 
       // Get the entry UID (from creation response or existing)
       const finalEntryUid = entryData.entry?.uid || entryUid;
-      
+
       updateStep("entry", {
         status: "completed",
-        detail: entryUid ? "Entry updated successfully" : "Entry created successfully",
+        detail: entryUid
+          ? "Entry updated successfully"
+          : "Entry created successfully",
       });
 
       // Step 6: Link thumbnail (if we have one)
       if (thumbnailUid && finalEntryUid) {
-        updateStep("thumbnail", { status: "in_progress", detail: "Linking thumbnail to entry..." });
-        
+        updateStep("thumbnail", {
+          status: "in_progress",
+          detail: "Linking thumbnail to entry...",
+        });
+
         try {
-          const thumbnailResponse = await fetch("/api/contentstack/entries/update", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              entryUid: finalEntryUid,
-              entry: {
-                thumbnail: thumbnailUid,
-              },
-            }),
-          });
+          const thumbnailResponse = await fetch(
+            "/api/contentstack/entries/update",
+            {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                entryUid: finalEntryUid,
+                entry: {
+                  thumbnail: thumbnailUid,
+                },
+              }),
+            }
+          );
 
           const thumbnailData = await thumbnailResponse.json();
 
@@ -363,7 +390,9 @@ export default function ContentstackExportModal({
       } else {
         updateStep("thumbnail", {
           status: "completed",
-          detail: thumbnailUid ? "No entry UID to link" : "No thumbnail to link",
+          detail: thumbnailUid
+            ? "No entry UID to link"
+            : "No thumbnail to link",
         });
       }
 
@@ -376,7 +405,7 @@ export default function ContentstackExportModal({
     } catch (error: any) {
       console.error("Contentstack export error:", error);
       setExportError(error.message || "Failed to export to Contentstack");
-      
+
       // Mark current step as error
       setSteps((prev) =>
         prev.map((step) =>
@@ -479,8 +508,8 @@ export default function ContentstackExportModal({
                 </div>
 
                 <p className="text-sm text-gray-600">
-                  This will export your article to Contentstack. If an entry with
-                  the same title or URL exists, it will be updated.
+                  This will export your article to Contentstack. If an entry
+                  with the same title or URL exists, it will be updated.
                 </p>
               </div>
             )}
@@ -596,7 +625,9 @@ export default function ContentstackExportModal({
             {/* Export error */}
             {exportError && !isExporting && (
               <div className="mt-4 p-4 bg-red-50 rounded-lg border border-red-200">
-                <p className="text-sm font-medium text-red-800">Export Failed</p>
+                <p className="text-sm font-medium text-red-800">
+                  Export Failed
+                </p>
                 <p className="text-sm text-red-600 mt-1">{exportError}</p>
               </div>
             )}
@@ -699,4 +730,3 @@ export default function ContentstackExportModal({
     </>
   );
 }
-

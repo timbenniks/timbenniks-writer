@@ -1,6 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { Octokit } from "@octokit/rest";
-import matter from "gray-matter";
 import {
   transformToContentstackArticle,
   processArticles,
@@ -9,6 +8,27 @@ import {
   type ContentstackArticle,
   type RawFrontmatter,
 } from "../../utils/articleTransform";
+import {
+  getCachedProcessedData,
+  createArticlesCacheKey,
+  getCachedFileListing,
+  createRepoCacheKey,
+  purgeArticlesCache,
+} from "../../utils/cache";
+import { getGitHubConfig, isConfigError } from "../../utils/githubConfig";
+import {
+  parsePaginationParams,
+  parseSortParams,
+  parseTags,
+  shouldPurgeCache,
+  createSuccessResponse,
+  handleApiError,
+} from "../../utils/apiHelpers";
+import {
+  filterMarkdownFiles,
+  processFilesInBatches,
+  parseFrontmatter,
+} from "../../utils/fileFetcher";
 
 interface ArticlesResponse {
   success: boolean;
@@ -21,6 +41,7 @@ interface ArticlesResponse {
 
 /**
  * Fetch and parse all markdown files from GitHub
+ * Uses caching and optimized fetching
  */
 async function fetchArticlesFromGitHub(
   octokit: Octokit,
@@ -29,83 +50,54 @@ async function fetchArticlesFromGitHub(
   branch: string,
   folder: string
 ): Promise<ContentstackArticle[]> {
-  // Get contents of the folder
-  const response = await octokit.repos.getContent({
-    owner,
-    repo: repoName,
-    path: folder,
-    ref: branch,
-  });
+  const cacheKey = createArticlesCacheKey(owner, repoName, branch, folder);
 
-  const contents = Array.isArray(response.data) ? response.data : [response.data];
+  return getCachedProcessedData(
+    cacheKey,
+    async () => {
+      // Get contents of the folder (cached)
+      const folderCacheKey = createRepoCacheKey(owner, repoName, branch, folder);
+      const response = await getCachedFileListing(
+        folderCacheKey,
+        async () => {
+          return octokit.repos.getContent({
+            owner,
+            repo: repoName,
+            path: folder,
+            ref: branch,
+          });
+        },
+        [`articles-folder-${folder}`]
+      );
 
-  // Filter markdown files
-  const markdownFiles = contents.filter((item: any) => {
-    if (item.type !== "file") return false;
-    const fileName = item.name.toLowerCase();
-    return fileName.endsWith(".md") || fileName.endsWith(".markdown");
-  });
+      const contents = Array.isArray(response.data) ? response.data : [response.data];
+      const markdownFiles = filterMarkdownFiles(contents);
 
-  // Fetch and parse all files in parallel
-  const articlesPromises = markdownFiles.map(async (item: any) => {
-    try {
-      const fileResponse = await octokit.repos.getContent({
+      // Process files in batches
+      return processFilesInBatches<ContentstackArticle>(
+        markdownFiles,
+        async (item, fileContent) => {
+          const parsed = parseFrontmatter(fileContent);
+          const slug = buildSlug(parsed.data as RawFrontmatter, item.name);
+          
+          if (isExcludedSlug(slug)) return null;
+
+          return transformToContentstackArticle(
+            parsed.content,
+            parsed.data as RawFrontmatter,
+            { path: item.path, sha: item.sha, name: item.name }
+          );
+        },
+        octokit,
         owner,
-        repo: repoName,
-        path: item.path,
-        ref: branch,
-      });
-
-      if ("content" in fileResponse.data && fileResponse.data.encoding === "base64") {
-        const fileContent = Buffer.from(fileResponse.data.content, "base64").toString("utf-8");
-        const parsed = matter(fileContent);
-
-        // Skip excluded slugs early
-        const slug = buildSlug(parsed.data as RawFrontmatter, item.name);
-        if (isExcludedSlug(slug)) return null;
-
-        return transformToContentstackArticle(
-          parsed.content,
-          parsed.data as RawFrontmatter,
-          { path: item.path, sha: item.sha, name: item.name }
-        );
-      }
-    } catch (error) {
-      console.warn(`Failed to parse article ${item.path}:`, error);
-    }
-    return null;
-  });
-
-  const results = await Promise.all(articlesPromises);
-  return results.filter((article): article is ContentstackArticle => article !== null);
+        repoName,
+        branch
+      );
+    },
+    [`articles-${owner}-${repoName}-${branch}-${folder}`]
+  );
 }
 
-/**
- * Parse and validate GitHub config from environment
- */
-function getGitHubConfig(overrides?: { repo?: string; branch?: string; folder?: string }) {
-  const token = process.env.GITHUB_TOKEN;
-  const repo = overrides?.repo || process.env.GITHUB_REPO;
-  const branch = overrides?.branch || process.env.GITHUB_BRANCH || "main";
-  const folder = overrides?.folder !== undefined ? overrides.folder : (process.env.GITHUB_FOLDER || "");
-
-  if (!token || !repo) {
-    return { error: "GitHub configuration missing. Set GITHUB_TOKEN and GITHUB_REPO in environment." };
-  }
-
-  const repoMatch = repo.match(/^([^\/]+)\/([^\/]+)$/);
-  if (!repoMatch) {
-    return { error: "Invalid GITHUB_REPO format. Use 'owner/repo'" };
-  }
-
-  return {
-    token,
-    owner: repoMatch[1],
-    repoName: repoMatch[2],
-    branch,
-    folder,
-  };
-}
 
 /**
  * GET /api/articles
@@ -123,62 +115,54 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
 
-    const limit = Math.min(Math.max(1, parseInt(searchParams.get("limit") || "10", 10)), 100);
-    const offset = Math.max(0, parseInt(searchParams.get("offset") || "0", 10));
-    const order = (searchParams.get("order") || "desc") as "asc" | "desc";
-    const orderBy = (searchParams.get("orderBy") || "date") as "date" | "title";
-    const tags = searchParams.get("tags")
-      ? searchParams.get("tags")!.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean)
-      : [];
+    // Handle cache purge
+    if (shouldPurgeCache(searchParams, "articles")) {
+      await purgeArticlesCache();
+    }
+
+    // Parse parameters
+    const { limit, offset } = parsePaginationParams(searchParams);
+    const { order, orderBy } = parseSortParams(searchParams, "date");
+    const tags = parseTags(searchParams);
     const draftFilter = (searchParams.get("draft") || "false") as "true" | "false" | "all";
 
+    // Get GitHub config
     const config = getGitHubConfig();
-    if ("error" in config) {
-      return NextResponse.json({ success: false, error: config.error }, { status: 500 });
+    if (isConfigError(config)) {
+      return handleApiError({ status: 500, message: config.error }, "Configuration error", {
+        articles: [],
+        total: 0,
+        limit,
+        offset,
+      });
     }
 
     const octokit = new Octokit({ auth: config.token });
-
     const allArticles = await fetchArticlesFromGitHub(
       octokit,
       config.owner,
       config.repoName,
       config.branch,
-      config.folder
+      config.folder || ""
     );
 
     const { articles, total } = processArticles(allArticles, {
       draftFilter,
       tags,
-      orderBy,
+      orderBy: orderBy as "date" | "title",
       order,
       offset,
       limit,
     });
 
-    const response: ArticlesResponse = {
-      success: true,
-      articles,
-      total,
-      limit,
-      offset,
-    };
-
-    return NextResponse.json(response);
+    return createSuccessResponse({ articles, total, limit, offset });
   } catch (error: any) {
-    console.error("Articles API error:", error);
-
-    if (error.status === 404) {
-      return NextResponse.json(
-        { success: false, articles: [], total: 0, limit: 10, offset: 0, error: "Repository path not found" },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json(
-      { success: false, articles: [], total: 0, limit: 10, offset: 0, error: error.message || "Failed to fetch articles" },
-      { status: 500 }
-    );
+    return handleApiError(error, "Failed to fetch articles", {
+      articles: [],
+      total: 0,
+      limit: 10,
+      offset: 0,
+    });
   }
 }
 
@@ -191,66 +175,58 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const limit = Math.min(Math.max(1, parseInt(body.limit || "10", 10)), 100);
-    const offset = Math.max(0, parseInt(body.offset || "0", 10));
-    const order = (body.order || "desc") as "asc" | "desc";
-    const orderBy = (body.orderBy || "date") as "date" | "title";
-    const tags = Array.isArray(body.tags)
-      ? body.tags.map((t: string) => t.toLowerCase().trim()).filter(Boolean)
-      : [];
+    // Handle cache purge
+    if (shouldPurgeCache(body, "articles")) {
+      await purgeArticlesCache();
+    }
+
+    // Parse parameters
+    const { limit, offset } = parsePaginationParams(body);
+    const { order, orderBy } = parseSortParams(body, "date");
+    const tags = parseTags(body);
     const draftFilter = (body.draft || "false") as "true" | "false" | "all";
 
+    // Get GitHub config with overrides
     const config = getGitHubConfig({
       repo: body.repo,
       branch: body.branch,
       folder: body.folder,
     });
 
-    if ("error" in config) {
-      return NextResponse.json({ success: false, error: config.error }, { status: 500 });
+    if (isConfigError(config)) {
+      return handleApiError({ status: 500, message: config.error }, "Configuration error", {
+        articles: [],
+        total: 0,
+        limit,
+        offset,
+      });
     }
 
     const octokit = new Octokit({ auth: config.token });
-
     const allArticles = await fetchArticlesFromGitHub(
       octokit,
       config.owner,
       config.repoName,
       config.branch,
-      config.folder
+      config.folder || ""
     );
 
     const { articles, total } = processArticles(allArticles, {
       draftFilter,
       tags,
-      orderBy,
+      orderBy: orderBy as "date" | "title",
       order,
       offset,
       limit,
     });
 
-    const response: ArticlesResponse = {
-      success: true,
-      articles,
-      total,
-      limit,
-      offset,
-    };
-
-    return NextResponse.json(response);
+    return createSuccessResponse({ articles, total, limit, offset });
   } catch (error: any) {
-    console.error("Articles API error:", error);
-
-    if (error.status === 404) {
-      return NextResponse.json(
-        { success: false, articles: [], total: 0, limit: 10, offset: 0, error: "Repository path not found" },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json(
-      { success: false, articles: [], total: 0, limit: 10, offset: 0, error: error.message || "Failed to fetch articles" },
-      { status: 500 }
-    );
+    return handleApiError(error, "Failed to fetch articles", {
+      articles: [],
+      total: 0,
+      limit: 10,
+      offset: 0,
+    });
   }
 }

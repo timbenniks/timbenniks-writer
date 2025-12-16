@@ -18,6 +18,8 @@ import {
   BUTTON_PRIMARY_CLASSES,
   BUTTON_SECONDARY_CLASSES,
 } from "../utils/constants";
+import { stageVideoChange, stageDeleteChange } from "../utils/staging";
+import StagingPanel from "../components/StagingPanel";
 
 // Inner component that uses useSearchParams
 function VideosPageContent() {
@@ -53,6 +55,12 @@ function VideosPageContent() {
     const tagsParam = searchParams.get("tags");
     return tagsParam ? tagsParam.split(",") : [];
   });
+  const [noTranscriptFilter, setNoTranscriptFilter] = useState<boolean>(
+    searchParams.get("noTranscript") === "true"
+  );
+  const [noTagsFilter, setNoTagsFilter] = useState<boolean>(
+    searchParams.get("noTags") === "true"
+  );
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">(
     (searchParams.get("sort") as "newest" | "oldest") || "newest"
   );
@@ -124,10 +132,24 @@ function VideosPageContent() {
     [updateUrlParams]
   );
 
+  const handleNoTranscriptToggle = useCallback(() => {
+    const newValue = !noTranscriptFilter;
+    setNoTranscriptFilter(newValue);
+    updateUrlParams({ noTranscript: newValue ? "true" : null });
+  }, [noTranscriptFilter, updateUrlParams]);
+
+  const handleNoTagsToggle = useCallback(() => {
+    const newValue = !noTagsFilter;
+    setNoTagsFilter(newValue);
+    updateUrlParams({ noTags: newValue ? "true" : null });
+  }, [noTagsFilter, updateUrlParams]);
+
   const clearAllFilters = useCallback(() => {
     setSearchQuery("");
     setSelectedPlaylist(null);
     setSelectedTags([]);
+    setNoTranscriptFilter(false);
+    setNoTagsFilter(false);
     setSortOrder("newest");
     router.replace("/videos", { scroll: false });
   }, [router]);
@@ -216,7 +238,25 @@ function VideosPageContent() {
           selectedTags.length === 0 ||
           selectedTags.some((tag) => video.frontmatter.tags?.includes(tag));
 
-        return matchesSearch && matchesPlaylist && matchesTags;
+        // No transcript filter
+        const matchesNoTranscript =
+          !noTranscriptFilter ||
+          !video.frontmatter.transcript ||
+          video.frontmatter.transcript.trim() === "";
+
+        // No tags filter
+        const matchesNoTags =
+          !noTagsFilter ||
+          !video.frontmatter.tags ||
+          video.frontmatter.tags.length === 0;
+
+        return (
+          matchesSearch &&
+          matchesPlaylist &&
+          matchesTags &&
+          matchesNoTranscript &&
+          matchesNoTags
+        );
       })
       .sort((a, b) => {
         const dateA = a.frontmatter.date || "";
@@ -225,7 +265,15 @@ function VideosPageContent() {
           ? dateB.localeCompare(dateA)
           : dateA.localeCompare(dateB);
       });
-  }, [videos, searchQuery, selectedPlaylist, selectedTags, sortOrder]);
+  }, [
+    videos,
+    searchQuery,
+    selectedPlaylist,
+    selectedTags,
+    noTranscriptFilter,
+    noTagsFilter,
+    sortOrder,
+  ]);
 
   const handleDeleteClick = (e: React.MouseEvent, video: GitHubVideoFile) => {
     e.preventDefault();
@@ -239,23 +287,13 @@ function VideosPageContent() {
     setIsDeleting(true);
 
     try {
-      const response = await fetch("/api/github/videos/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          repo: githubConfig.repo,
-          branch: githubConfig.branch,
-          filePath: deleteVideo.path,
-          sha: deleteVideo.sha,
-          videoTitle: deleteVideo.frontmatter.title,
-        }),
+      // Always stage deletions - no immediate commits
+      stageDeleteChange({
+        filePath: deleteVideo.path,
+        sha: deleteVideo.sha,
+        title: deleteVideo.frontmatter.title,
+        commitMessage: `Delete video: ${deleteVideo.frontmatter.title}`,
       });
-
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || "Failed to delete video");
-      }
 
       setVideos((prev) => prev.filter((v) => v.sha !== deleteVideo.sha));
       setDeleteVideo(null);
@@ -361,34 +399,49 @@ function VideosPageContent() {
             : video.frontmatter.transcript,
         };
 
-        // Step 4: Save to GitHub
+        // Step 4: Always stage changes
         setBulkRefreshProgress((prev) => ({ ...prev, status: "saving" }));
 
-        const saveResponse = await fetch("/api/github/videos/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            repo: githubConfig.repo,
-            branch: githubConfig.branch,
-            frontmatter: updatedFrontmatter,
-            filePath: video.path,
-            sha: video.sha,
-          }),
+        // Build file content for staging
+        const yaml = require("js-yaml");
+        const yamlContent = yaml.dump(
+          {
+            date: updatedFrontmatter.date || "",
+            position: updatedFrontmatter.position || "000",
+            title: updatedFrontmatter.title || "",
+            description: updatedFrontmatter.description || "",
+            image: updatedFrontmatter.image || "",
+            videoId: updatedFrontmatter.videoId || "",
+            transcript: updatedFrontmatter.transcript || "",
+            tags: updatedFrontmatter.tags || [],
+            playlist: updatedFrontmatter.playlist || "",
+            duration: updatedFrontmatter.duration || undefined,
+          },
+          {
+            lineWidth: -1,
+            noRefs: true,
+            sortKeys: false,
+            quotingType: '"',
+            forceQuotes: false,
+          }
+        );
+        const fileContent = `---\n${yamlContent}---\n\n`;
+
+        // Always stage the change
+        stageVideoChange({
+          filePath: video.path,
+          content: fileContent,
+          sha: video.sha || undefined,
+          title: updatedFrontmatter.title,
+          videoId: updatedFrontmatter.videoId,
+          commitMessage: `Update video: ${updatedFrontmatter.title}`,
         });
 
-        const saveData = await saveResponse.json();
-
-        if (saveData.success) {
-          updatedVideos.push({
-            ...video,
-            sha: saveData.sha,
-            frontmatter: updatedFrontmatter,
-          });
-        } else {
-          errors.push(
-            `${video.frontmatter.title}: ${saveData.error || "Failed to save"}`
-          );
-        }
+        // Track as updated for local state
+        updatedVideos.push({
+          ...video,
+          frontmatter: updatedFrontmatter,
+        });
 
         // Small delay between videos to avoid rate limiting
         if (i < selectedVideosList.length - 1) {
@@ -408,13 +461,13 @@ function VideosPageContent() {
         const updatedMap = new Map(
           updatedVideos.map((v) => [v.frontmatter.videoId, v])
         );
-        
+
         // Filter out videos that were updated, then add the updated versions
         // This prevents duplicates when videos have new SHAs
         const filtered = prev.filter(
           (v) => !updatedMap.has(v.frontmatter.videoId)
         );
-        
+
         return [...filtered, ...updatedVideos];
       });
     }
@@ -465,12 +518,7 @@ function VideosPageContent() {
       });
 
       try {
-        // Skip videos that already have tags
-        if (video.frontmatter.tags && video.frontmatter.tags.length > 0) {
-          continue;
-        }
-
-        // Step 1: Generate tags using AI
+        // Step 1: Generate tags using AI (will replace existing tags)
         const tagsResponse = await fetch("/api/openai/generate-video-tags", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -488,7 +536,7 @@ function VideosPageContent() {
           continue;
         }
 
-        // Step 2: Save to GitHub
+        // Step 2: Always stage changes
         setBulkTagProgress((prev) => ({ ...prev, status: "saving" }));
 
         const updatedFrontmatter = {
@@ -496,31 +544,46 @@ function VideosPageContent() {
           tags: tagsData.tags,
         };
 
-        const saveResponse = await fetch("/api/github/videos/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            repo: githubConfig.repo,
-            branch: githubConfig.branch,
-            frontmatter: updatedFrontmatter,
-            filePath: video.path,
-            sha: video.sha,
-          }),
+        // Build file content for staging
+        const yaml = require("js-yaml");
+        const yamlContent = yaml.dump(
+          {
+            date: updatedFrontmatter.date || "",
+            position: updatedFrontmatter.position || "000",
+            title: updatedFrontmatter.title || "",
+            description: updatedFrontmatter.description || "",
+            image: updatedFrontmatter.image || "",
+            videoId: updatedFrontmatter.videoId || "",
+            transcript: updatedFrontmatter.transcript || "",
+            tags: updatedFrontmatter.tags || [],
+            playlist: updatedFrontmatter.playlist || "",
+            duration: updatedFrontmatter.duration || undefined,
+          },
+          {
+            lineWidth: -1,
+            noRefs: true,
+            sortKeys: false,
+            quotingType: '"',
+            forceQuotes: false,
+          }
+        );
+        const fileContent = `---\n${yamlContent}---\n\n`;
+
+        // Always stage the change
+        stageVideoChange({
+          filePath: video.path,
+          content: fileContent,
+          sha: video.sha || undefined,
+          title: updatedFrontmatter.title,
+          videoId: updatedFrontmatter.videoId,
+          commitMessage: `Update tags for video: ${updatedFrontmatter.title}`,
         });
 
-        const saveData = await saveResponse.json();
-
-        if (saveData.success) {
-          updatedVideos.push({
-            ...video,
-            sha: saveData.sha,
-            frontmatter: updatedFrontmatter,
-          });
-        } else {
-          errors.push(
-            `${video.frontmatter.title}: ${saveData.error || "Failed to save"}`
-          );
-        }
+        // Track as updated for local state
+        updatedVideos.push({
+          ...video,
+          frontmatter: updatedFrontmatter,
+        });
 
         // Small delay between videos to avoid rate limiting
         if (i < selectedVideosList.length - 1) {
@@ -540,13 +603,13 @@ function VideosPageContent() {
         const updatedMap = new Map(
           updatedVideos.map((v) => [v.frontmatter.videoId, v])
         );
-        
+
         // Filter out videos that were updated, then add the updated versions
         // This prevents duplicates when videos have new SHAs
         const filtered = prev.filter(
           (v) => !updatedMap.has(v.frontmatter.videoId)
         );
-        
+
         return [...filtered, ...updatedVideos];
       });
     }
@@ -557,7 +620,13 @@ function VideosPageContent() {
     ).length;
     const successCount = updatedVideos.length;
 
-    if (errors.length > 0 || skippedCount > 0) {
+    if (successCount > 0) {
+      setError(
+        `Staged ${successCount} video change${
+          successCount !== 1 ? "s" : ""
+        }. Use the "Staged Changes" button to commit.`
+      );
+    } else if (errors.length > 0 || skippedCount > 0) {
       let message = `Generated tags for ${successCount} video${
         successCount !== 1 ? "s" : ""
       }.`;
@@ -761,7 +830,20 @@ function VideosPageContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       <AppHeader
-        actions={headerActions}
+        actions={
+          <>
+            {githubConfig && (
+              <StagingPanel
+                githubConfig={githubConfig}
+                onCommit={() => {
+                  // Reload videos after commit
+                  window.location.reload();
+                }}
+              />
+            )}
+            {headerActions}
+          </>
+        }
         subtitle={
           githubConfig
             ? `Connected to ${githubConfig.repo} / content/3.videos`
@@ -806,7 +888,7 @@ function VideosPageContent() {
       )}
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="w-full px-8 py-8">
         {configLoading ? (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -828,7 +910,7 @@ function VideosPageContent() {
         ) : (
           <div className="flex gap-8">
             {/* Sidebar */}
-            <aside className="w-64 flex-shrink-0">
+            <aside className="w-72 flex-shrink-0">
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sticky top-4">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">
                   Filters
@@ -876,6 +958,73 @@ function VideosPageContent() {
                     </div>
                   </nav>
                 )}
+
+                {/* Filters */}
+                <div className="mb-6">
+                  <h3 className="block text-sm font-medium text-gray-700 mb-3">
+                    Filters
+                  </h3>
+                  <div className="space-y-2">
+                    <button
+                      onClick={handleNoTranscriptToggle}
+                      className={clsx(
+                        "w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                        noTranscriptFilter
+                          ? "bg-gray-900 text-white"
+                          : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg
+                          className={clsx(
+                            "w-4 h-4",
+                            noTranscriptFilter ? "text-white" : "text-gray-400"
+                          )}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          />
+                        </svg>
+                        <span>No Transcript</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={handleNoTagsToggle}
+                      className={clsx(
+                        "w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                        noTagsFilter
+                          ? "bg-gray-900 text-white"
+                          : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg
+                          className={clsx(
+                            "w-4 h-4",
+                            noTagsFilter ? "text-white" : "text-gray-400"
+                          )}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
+                          />
+                        </svg>
+                        <span>No Tags</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
 
                 {/* Tag Filters */}
                 {allTags.length > 0 && (
@@ -1003,7 +1152,7 @@ function VideosPageContent() {
 
               {/* Search and Sort */}
               <div className="mb-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <div className="flex-1 max-w-md">
+                <div className="flex-1 max-w-lg">
                   <label htmlFor="search-videos" className="sr-only">
                     Search videos
                   </label>
@@ -1055,7 +1204,7 @@ function VideosPageContent() {
 
               {/* Video Grid */}
               {!isLoading && filteredVideos.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
                   {filteredVideos.map((video) => (
                     <VideoCard
                       key={video.sha}

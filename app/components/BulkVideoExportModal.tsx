@@ -48,7 +48,7 @@ export default function BulkVideoExportModal({
 
   const exportSingleVideo = async (
     video: GitHubVideoFile,
-    videosFolderUid: string | null
+    _videosFolderUid: string | null
   ): Promise<{
     success: boolean;
     error?: string;
@@ -79,7 +79,8 @@ export default function BulkVideoExportModal({
       }
 
       // Process taxonomies
-      const taxonomyRefs: Array<{ taxonomy_uid: string; term_uid: string }> = [];
+      const taxonomyRefs: Array<{ taxonomy_uid: string; term_uid: string }> =
+        [];
 
       // Add video category if playlist has a mapping
       const categoryUid = getContentstackCategory(frontmatter.playlist);
@@ -95,8 +96,8 @@ export default function BulkVideoExportModal({
       for (const tag of tags) {
         const termUid = tag
           .toLowerCase()
-          .replace(/\s+/g, "-")
-          .replace(/[^a-z0-9-]/g, "");
+          .replace(/\s+/g, "_")
+          .replace(/[^a-z0-9_]/g, "");
 
         // Try to create the term
         await fetch("/api/contentstack/taxonomy-term", {
@@ -116,26 +117,6 @@ export default function BulkVideoExportModal({
         await delay(100); // Small delay between taxonomy operations
       }
 
-      // Upload thumbnail
-      let thumbnailUid: string | null = null;
-      if (frontmatter.image) {
-        const assetResponse = await fetch("/api/contentstack/assets", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            url: frontmatter.image,
-            title: `video-${frontmatter.videoId}-thumbnail`,
-            description: `Thumbnail for ${frontmatter.title}`,
-            folder: videosFolderUid,
-          }),
-        });
-
-        const assetData = await assetResponse.json();
-        if (assetResponse.ok && assetData.asset?.uid) {
-          thumbnailUid = assetData.asset.uid;
-        }
-      }
-
       // Build entry payload
       const entryPayload: Record<string, unknown> = {
         title: frontmatter.title,
@@ -149,8 +130,9 @@ export default function BulkVideoExportModal({
           : new Date().toISOString(),
       };
 
-      if (thumbnailUid) {
-        entryPayload.thumbnail = thumbnailUid;
+      // Use image URL directly instead of uploading as asset
+      if (frontmatter.image) {
+        entryPayload.image_url = frontmatter.image;
       }
 
       if (taxonomyRefs.length > 0) {
@@ -194,7 +176,8 @@ export default function BulkVideoExportModal({
         dashboardUrl: entryData.entry?.dashboardUrl,
       };
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       return { success: false, error: errorMessage };
     }
   };
@@ -206,21 +189,6 @@ export default function BulkVideoExportModal({
     // Reset all results to pending
     setResults(videos.map((video) => ({ video, status: "pending" })));
 
-    // Get or create the "videos" folder for assets
-    let videosFolderUid: string | null = null;
-    try {
-      const folderResponse = await fetch(
-        "/api/contentstack/folders?name=videos"
-      );
-      const folderData = await folderResponse.json();
-
-      if (folderData.success && folderData.folder?.uid) {
-        videosFolderUid = folderData.folder.uid;
-      }
-    } catch {
-      // Continue without folder - assets will go to root
-    }
-
     // Export videos sequentially with rate limiting
     for (let i = 0; i < videos.length; i++) {
       const video = videos[i];
@@ -228,12 +196,10 @@ export default function BulkVideoExportModal({
 
       // Update status to exporting
       setResults((prev) =>
-        prev.map((r, idx) =>
-          idx === i ? { ...r, status: "exporting" } : r
-        )
+        prev.map((r, idx) => (idx === i ? { ...r, status: "exporting" } : r))
       );
 
-      const result = await exportSingleVideo(video, videosFolderUid);
+      const result = await exportSingleVideo(video, null);
 
       // Update result
       setResults((prev) =>
@@ -327,7 +293,9 @@ export default function BulkVideoExportModal({
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="font-medium text-gray-900">Videos to export:</h3>
+                  <h3 className="font-medium text-gray-900">
+                    Videos to export:
+                  </h3>
                   <ul className="space-y-1 max-h-48 overflow-y-auto">
                     {videos.map((video) => (
                       <li
@@ -335,7 +303,9 @@ export default function BulkVideoExportModal({
                         className="text-sm text-gray-600 flex items-center gap-2"
                       >
                         <span className="w-2 h-2 bg-purple-400 rounded-full flex-shrink-0" />
-                        <span className="truncate">{video.frontmatter.title}</span>
+                        <span className="truncate">
+                          {video.frontmatter.title}
+                        </span>
                         {video.frontmatter.playlist && (
                           <span className="text-xs text-gray-400">
                             ({video.frontmatter.playlist})
@@ -446,7 +416,9 @@ export default function BulkVideoExportModal({
                         {result.video.frontmatter.title}
                       </span>
                       {result.isUpdate && result.status === "success" && (
-                        <span className="text-xs text-amber-600">(updated)</span>
+                        <span className="text-xs text-amber-600">
+                          (updated)
+                        </span>
                       )}
                       {result.error && (
                         <span className="text-xs text-red-600 truncate max-w-[150px]">
@@ -567,7 +539,9 @@ export default function BulkVideoExportModal({
                         {result.video.frontmatter.title}
                       </span>
                       {result.isUpdate && (
-                        <span className="text-xs text-amber-600">(updated)</span>
+                        <span className="text-xs text-amber-600">
+                          (updated)
+                        </span>
                       )}
                       {result.dashboardUrl && (
                         <a
@@ -580,7 +554,9 @@ export default function BulkVideoExportModal({
                         </a>
                       )}
                       {result.error && (
-                        <span className="text-xs text-red-600">{result.error}</span>
+                        <span className="text-xs text-red-600">
+                          {result.error}
+                        </span>
                       )}
                     </div>
                   ))}
@@ -621,4 +597,3 @@ export default function BulkVideoExportModal({
     </>
   );
 }
-

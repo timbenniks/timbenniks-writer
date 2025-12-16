@@ -10,7 +10,13 @@ import ContentstackVideoExportModal from "../components/ContentstackVideoExportM
 import type { VideoFrontmatter, Playlist } from "../types/video";
 import { useGitHubConfig } from "../hooks/useGitHubConfig";
 import { usePlaylists } from "../hooks/usePlaylists";
-import { BUTTON_PRIMARY_CLASSES, BUTTON_SECONDARY_CLASSES, INPUT_CLASSES } from "../utils/constants";
+import {
+  BUTTON_PRIMARY_CLASSES,
+  BUTTON_SECONDARY_CLASSES,
+  INPUT_CLASSES,
+} from "../utils/constants";
+import { stageVideoChange } from "../utils/staging";
+import StagingPanel from "../components/StagingPanel";
 
 function VideoEditorContent() {
   const router = useRouter();
@@ -20,7 +26,11 @@ function VideoEditorContent() {
   const defaultPlaylist = searchParams.get("playlist") || "";
 
   const { config: githubConfig, loading: configLoading } = useGitHubConfig();
-  const { playlists: configPlaylists, addPlaylist, isSaving: isAddingPlaylist } = usePlaylists(githubConfig);
+  const {
+    playlists: configPlaylists,
+    addPlaylist,
+    isSaving: isAddingPlaylist,
+  } = usePlaylists(githubConfig);
 
   // Video state
   const [frontmatter, setFrontmatter] = useState<VideoFrontmatter>({
@@ -44,7 +54,9 @@ function VideoEditorContent() {
   const [isFetchingTranscript, setIsFetchingTranscript] = useState(false);
   const [isRefreshingFromYouTube, setIsRefreshingFromYouTube] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [saveStatus, setSaveStatus] = useState<
+    "idle" | "saving" | "saved" | "staged" | "error"
+  >("idle");
   const [newTag, setNewTag] = useState("");
   const [isGeneratingTags, setIsGeneratingTags] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -60,21 +72,23 @@ function VideoEditorContent() {
   }, []);
 
   // Check if current playlist is missing from config
-  const isPlaylistMissingFromConfig = 
-    frontmatter.playlist && 
+  const isPlaylistMissingFromConfig =
+    frontmatter.playlist &&
     !configPlaylists.some((p) => p.folder === frontmatter.playlist);
 
   // Add missing playlist to config
   const handleAddPlaylistToConfig = async () => {
     if (!frontmatter.playlist) return;
-    
+
     const newPlaylist: Playlist = {
       id: "", // Will need to be filled in later in settings
-      name: frontmatter.playlist.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      name: frontmatter.playlist
+        .replace(/-/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase()),
       folder: frontmatter.playlist,
       enabled: true,
     };
-    
+
     const success = await addPlaylist(newPlaylist);
     if (success) {
       setPlaylistJustAdded(true);
@@ -144,36 +158,57 @@ function VideoEditorContent() {
     setSaveStatus("idle");
 
     try {
-      const response = await fetch("/api/github/videos/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          repo: githubConfig.repo,
-          branch: githubConfig.branch,
-          frontmatter,
-          filePath: originalPath,
-          sha: originalSha,
-        }),
+      // Build file content for staging
+      const yaml = require("js-yaml");
+      const yamlContent = yaml.dump(
+        {
+          date: frontmatter.date || "",
+          position: frontmatter.position || "000",
+          title: frontmatter.title || "",
+          description: frontmatter.description || "",
+          image: frontmatter.image || "",
+          videoId: frontmatter.videoId || "",
+          transcript: frontmatter.transcript || "",
+          tags: frontmatter.tags || [],
+          playlist: frontmatter.playlist || "",
+          duration: frontmatter.duration || undefined,
+        },
+        {
+          lineWidth: -1,
+          noRefs: true,
+          sortKeys: false,
+          quotingType: '"',
+          forceQuotes: false,
+        }
+      );
+      const fileContent = `---\n${yamlContent}---\n\n`;
+
+      // Always stage changes - no immediate commits
+      const videosFolder =
+        process.env.NEXT_PUBLIC_GITHUB_VIDEOS_FOLDER || "content/3.videos";
+      const filename = `${frontmatter.position}-${frontmatter.videoId}.md`;
+      const newFilePath = `${videosFolder}/${frontmatter.playlist}/${filename}`;
+
+      stageVideoChange({
+        filePath: newFilePath,
+        content: fileContent,
+        sha: originalSha || undefined,
+        oldPath: originalPath || undefined,
+        title: frontmatter.title,
+        videoId: frontmatter.videoId,
+        commitMessage: `Update video: ${frontmatter.title}`,
       });
 
-      const data = await response.json();
-
-      if (data.success) {
-        setSaveStatus("saved");
-        setOriginalSha(data.sha);
-        setOriginalPath(data.filePath);
-
-        // If this was a new video, update the URL
-        if (isNew && data.filePath) {
-          router.replace(`/video?file=${encodeURIComponent(data.filePath)}`);
-        }
-
-        // Reset save status after 3 seconds
-        setTimeout(() => setSaveStatus("idle"), 3000);
-      } else {
-        setError(data.error || "Failed to save video");
-        setSaveStatus("error");
+      // Update local state
+      if (isNew && newFilePath) {
+        setOriginalPath(newFilePath);
+        router.replace(`/video?file=${encodeURIComponent(newFilePath)}`);
+      } else if (newFilePath !== originalPath) {
+        setOriginalPath(newFilePath);
       }
+
+      setSaveStatus("staged");
+      setTimeout(() => setSaveStatus("idle"), 3000);
     } catch (err: any) {
       setError(err.message || "Failed to save video");
       setSaveStatus("error");
@@ -228,25 +263,39 @@ function VideoEditorContent() {
     setError(null);
 
     try {
-      const response = await fetch("/api/youtube/video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoId: frontmatter.videoId }),
-      });
+      // Fetch video details and transcript in parallel
+      const [videoResponse, transcriptResponse] = await Promise.all([
+        fetch("/api/youtube/video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ videoId: frontmatter.videoId }),
+        }),
+        fetch("/api/youtube/transcript", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ videoId: frontmatter.videoId }),
+        }),
+      ]);
 
-      const data = await response.json();
+      const videoData = await videoResponse.json();
+      const transcriptData = await transcriptResponse.json();
 
-      if (data.success && data.video) {
+      if (videoData.success && videoData.video) {
         setFrontmatter((prev) => ({
           ...prev,
-          title: data.video.title,
-          description: data.video.description,
-          image: data.video.thumbnail,
-          date: data.video.publishedAt,
-          duration: data.video.duration,
+          title: videoData.video.title,
+          description: videoData.video.description,
+          image: videoData.video.thumbnail,
+          date: videoData.video.publishedAt,
+          duration: videoData.video.duration,
+          // Update transcript if successfully fetched, otherwise keep existing
+          transcript:
+            transcriptData.success && transcriptData.transcript
+              ? transcriptData.transcript
+              : prev.transcript,
         }));
       } else {
-        setError(data.error || "Failed to fetch video info");
+        setError(videoData.error || "Failed to fetch video info");
       }
     } catch (err: any) {
       setError(err.message || "Failed to fetch video info");
@@ -291,16 +340,11 @@ function VideoEditorContent() {
       const data = await response.json();
 
       if (data.success && data.tags) {
-        // Add new tags without duplicates
-        const existingTags = new Set(frontmatter.tags);
-        const newTags = data.tags.filter((tag: string) => !existingTags.has(tag));
-
-        if (newTags.length > 0) {
-          setFrontmatter((prev) => ({
-            ...prev,
-            tags: [...prev.tags, ...newTags],
-          }));
-        }
+        // Replace all existing tags with the new ones
+        setFrontmatter((prev) => ({
+          ...prev,
+          tags: data.tags,
+        }));
       } else {
         setError(data.error || "Failed to generate tags");
       }
@@ -364,7 +408,7 @@ function VideoEditorContent() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+        <div className="w-full flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <Link
               href={backUrl}
@@ -397,63 +441,78 @@ function VideoEditorContent() {
                 ✓ Saved
               </span>
             )}
+            {saveStatus === "staged" && (
+              <span className="text-sm text-blue-600 font-medium">
+                ✓ Staged
+              </span>
+            )}
             {saveStatus === "error" && (
               <span className="text-sm text-red-600 font-medium">
                 Save failed
               </span>
             )}
+            {githubConfig && (
+              <StagingPanel
+                githubConfig={githubConfig}
+                onCommit={() => {
+                  if (filePath) {
+                    loadVideo();
+                  }
+                }}
+              />
+            )}
             <button
-              onClick={saveVideo}
-              disabled={isSaving}
-              className={clsx(
-                "px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-2",
-                isSaving
-                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                  : "bg-gray-900 text-white hover:bg-gray-800"
-              )}
-            >
-              {isSaving ? (
-                <>
-                  <svg
-                    className="animate-spin h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
+                onClick={saveVideo}
+                disabled={isSaving}
+                className={clsx(
+                  "px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-2",
+                  isSaving
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    : "bg-gray-900 text-white hover:bg-gray-800"
+                )}
+              >
+                {isSaving ? (
+                  <>
+                    <svg
+                      className="animate-spin h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    Staging...
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
                       stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
-                    />
-                  </svg>
-                  Save to GitHub
-                </>
-              )}
-            </button>
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
+                      />
+                    </svg>
+                    Stage Changes
+                  </>
+                )}
+              </button>
             <button
               onClick={() => setIsExportModalOpen(true)}
               className={BUTTON_SECONDARY_CLASSES}
@@ -612,13 +671,25 @@ function VideoEditorContent() {
                           <span className="font-medium text-amber-800 capitalize">
                             {frontmatter.playlist.replace(/-/g, " ")}
                           </span>
-                          <span className="text-amber-600 ml-2">(not in config)</span>
+                          <span className="text-amber-600 ml-2">
+                            (not in config)
+                          </span>
                         </div>
                       </div>
                       {playlistJustAdded ? (
                         <p className="text-sm text-green-600 flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M5 13l4 4L19 7"
+                            />
                           </svg>
                           Added! Go to Settings to add the YouTube Playlist ID.
                         </p>
@@ -630,18 +701,44 @@ function VideoEditorContent() {
                         >
                           {isAddingPlaylist ? (
                             <>
-                              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              <svg
+                                className="animate-spin h-4 w-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                              >
+                                <circle
+                                  className="opacity-25"
+                                  cx="12"
+                                  cy="12"
+                                  r="10"
+                                  stroke="currentColor"
+                                  strokeWidth="4"
+                                />
+                                <path
+                                  className="opacity-75"
+                                  fill="currentColor"
+                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                />
                               </svg>
                               Adding...
                             </>
                           ) : (
                             <>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 4v16m8-8H4"
+                                />
                               </svg>
-                              Add &quot;{frontmatter.playlist}&quot; to playlists.json
+                              Add &quot;{frontmatter.playlist}&quot; to
+                              playlists.json
                             </>
                           )}
                         </button>
@@ -705,9 +802,7 @@ function VideoEditorContent() {
                     id="video-date"
                     type="date"
                     value={
-                      frontmatter.date
-                        ? frontmatter.date.split("T")[0]
-                        : ""
+                      frontmatter.date ? frontmatter.date.split("T")[0] : ""
                     }
                     onChange={(e) =>
                       setFrontmatter((prev) => ({
@@ -807,7 +902,11 @@ function VideoEditorContent() {
                       ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                       : "bg-purple-600 text-white hover:bg-purple-700"
                   )}
-                  title={!frontmatter.title ? "Title required to generate tags" : "Generate tags using AI"}
+                  title={
+                    !frontmatter.title
+                      ? "Title required to generate tags"
+                      : "Generate tags using AI"
+                  }
                 >
                   {isGeneratingTags ? (
                     <>
@@ -834,15 +933,25 @@ function VideoEditorContent() {
                     </>
                   ) : (
                     <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M13 10V3L4 14h7v7l9-11h-7z"
+                        />
                       </svg>
                       Generate with AI
                     </>
                   )}
                 </button>
               </div>
-              
+
               {/* Existing tags */}
               <div className="flex flex-wrap gap-2 mb-4">
                 {frontmatter.tags.map((tag) => (
@@ -873,7 +982,9 @@ function VideoEditorContent() {
                   </span>
                 ))}
                 {frontmatter.tags.length === 0 && (
-                  <span className="text-sm text-gray-500">No tags added - click "Generate with AI" to suggest tags</span>
+                  <span className="text-sm text-gray-500">
+                    No tags added - click "Generate with AI" to suggest tags
+                  </span>
                 )}
               </div>
 
@@ -944,4 +1055,3 @@ export default function VideoEditorPage() {
     </Suspense>
   );
 }
-

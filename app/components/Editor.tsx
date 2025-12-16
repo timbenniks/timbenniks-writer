@@ -44,6 +44,8 @@ import { slugify } from "../utils/helpers";
 import DiffView from "./DiffView";
 import ImageGeneratorModal from "./ImageGeneratorModal";
 import ContentstackExportModal from "./ContentstackExportModal";
+import { stageArticleChange, getStagedChanges } from "../utils/staging";
+import StagingPanel from "./StagingPanel";
 
 // Initialize Turndown service for HTML to Markdown conversion
 const turndownService = new TurndownService({
@@ -917,7 +919,6 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
   const router = useRouter();
   const [isMetadataOpen, setIsMetadataOpen] = useState(false);
   const [isMarkdownOpen, setIsMarkdownOpen] = useState(false);
-  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const lastScrollYRef = useRef(0);
@@ -937,11 +938,10 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
     useState<string>("");
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [commitMessage, setCommitMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [saveStatus, setSaveStatus] = useState<
-    "idle" | "saving" | "saved" | "error"
+    "idle" | "saving" | "saved" | "staged" | "error"
   >("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [fileChangedRemotely, setFileChangedRemotely] = useState(false);
@@ -955,11 +955,12 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isImageGeneratorOpen, setIsImageGeneratorOpen] = useState(false);
-  const [isContentstackExportOpen, setIsContentstackExportOpen] = useState(false);
+  const [isContentstackExportOpen, setIsContentstackExportOpen] =
+    useState(false);
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
   const [includeFrontmatter, setIncludeFrontmatter] = useState(false);
   const [isPasteMarkdownOpen, setIsPasteMarkdownOpen] = useState(false);
-  
+
   // Ref to access the parsed markdown handler from within useEditor's handlePaste
   const handleParsedMarkdownRef = useRef<
     ((htmlContent: string, metadata: Partial<ArticleMetadata>) => void) | null
@@ -1372,7 +1373,7 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
     }
   };
 
-  const handleSaveClick = async () => {
+  const handleSave = async () => {
     if (!githubConfig) {
       setSaveStatus("error");
       setSaveError("Please configure GitHub repository first");
@@ -1393,34 +1394,9 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
       return;
     }
 
-    // Check if file has changed remotely before showing save modal
+    // Check if file has changed remotely before staging
     if (currentFileSha && !isNewFile) {
       await checkFileStatus();
-    }
-
-    setIsSaveModalOpen(true);
-    setCommitMessage("");
-  };
-
-  const handleSave = async () => {
-    if (!commitMessage.trim()) {
-      setSaveStatus("error");
-      setSaveError("Please enter a commit message");
-      setTimeout(() => {
-        setSaveStatus("idle");
-        setSaveError(null);
-      }, 3000);
-      return;
-    }
-
-    if (!githubConfig) {
-      setSaveStatus("error");
-      setSaveError("Missing GitHub configuration");
-      setTimeout(() => {
-        setSaveStatus("idle");
-        setSaveError(null);
-      }, 3000);
-      return;
     }
 
     // For new files, generate file path from slug or title
@@ -1457,69 +1433,55 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
     setSaveError(null);
     try {
       const fullMarkdown = getFullMarkdown();
-      const response = await fetch("/api/github/save", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          repo: githubConfig.repo,
-          branch: githubConfig.branch,
-          filePath: filePath,
-          content: fullMarkdown,
-          commitMessage: commitMessage.trim(),
-          sha: isNewFile ? undefined : currentFileSha, // Omit SHA for new files
-          // Token comes from environment variables on the server
-          authorName: githubConfig.authorName,
-          authorEmail: githubConfig.authorEmail,
-        }),
-      });
 
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || "Failed to save file");
+      // Always stage changes - no immediate commits
+      if (typeof window === "undefined") {
+        throw new Error("Staging is only available in the browser");
       }
 
-      // Update original markdown to reflect saved state
+      // Generate commit message automatically
+      const commitMessage = isNewFile
+        ? `Create article: ${articleMetadata.title}`
+        : `Update article: ${articleMetadata.title}`;
+
+      // Stage the change
+      stageArticleChange({
+        filePath: filePath,
+        content: fullMarkdown,
+        sha: isNewFile ? undefined : currentFileSha || undefined,
+        isNew: isNewFile,
+        title: articleMetadata.title,
+        commitMessage: commitMessage,
+      });
+
+      // Verify staging worked
+      const stagedChanges = getStagedChanges();
+      if (!stagedChanges.some((c) => c.filePath === filePath)) {
+        throw new Error("Failed to stage change - please try again");
+      }
+
+      // Update original markdown to reflect staged state
       setOriginalMarkdown(fullMarkdown);
-      setCurrentFileSha(data.sha || null);
-      setIsSaveModalOpen(false);
-      setCommitMessage("");
-      setLastSavedAt(new Date());
-      setSaveStatus("saved");
+      setSaveStatus("staged");
       setSaveError(null);
       setFileChangedRemotely(false);
 
-      // If this was a new file, reload it from GitHub and redirect
+      // If this was a new file, update the file path
       if (isNewFile) {
         setIsNewFile(false);
-        // Update currentFilePath first
         setCurrentFilePath(filePath);
-        // Reload the file from GitHub to get the full content
-        try {
-          await loadFileFromGitHub(filePath);
-          // Redirect to the article with the file path
-          router.push(`/article?file=${encodeURIComponent(filePath)}`);
-        } catch (error) {
-          console.error("Failed to reload file after save:", error);
-          // Still redirect even if reload fails
-          router.push(`/article?file=${encodeURIComponent(filePath)}`);
-        }
-      } else {
-        setIsNewFile(false);
+        // Redirect to the article with the file path
+        router.push(`/article?file=${encodeURIComponent(filePath)}`);
       }
 
-      // Clear saved status after 3 seconds
+      // Clear staged status after 3 seconds
       setTimeout(() => {
-        if (saveStatus === "saved") {
-          setSaveStatus("idle");
-        }
+        setSaveStatus("idle");
       }, 3000);
     } catch (error: any) {
-      console.error("Failed to save file:", error);
+      console.error("Failed to stage file:", error);
       setSaveStatus("error");
-      setSaveError(error.message || "Failed to save file to GitHub");
+      setSaveError(error.message || "Failed to stage file");
 
       // Clear error status after 5 seconds
       setTimeout(() => {
@@ -1602,24 +1564,33 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
         // Only trigger when editor is empty (new article) and content looks like markdown
         if (event.clipboardData) {
           const pastedText = event.clipboardData.getData("text/plain");
-          
+
           // Check if content looks like a markdown file with frontmatter
           // and the editor is essentially empty (new file)
           const editorText = state.doc.textContent.trim();
           const isEditorEmpty = editorText.length === 0;
-          
-          if (isEditorEmpty && pastedText && isMarkdownWithFrontmatter(pastedText)) {
+
+          if (
+            isEditorEmpty &&
+            pastedText &&
+            isMarkdownWithFrontmatter(pastedText)
+          ) {
             event.preventDefault();
-            
+
             // Parse the markdown asynchronously and update via ref
-            parseMarkdownWithFrontmatter(pastedText).then((result) => {
-              if (result && handleParsedMarkdownRef.current) {
-                handleParsedMarkdownRef.current(result.htmlContent, result.metadata);
-              }
-            }).catch((err) => {
-              console.error("Failed to parse pasted markdown:", err);
-            });
-            
+            parseMarkdownWithFrontmatter(pastedText)
+              .then((result) => {
+                if (result && handleParsedMarkdownRef.current) {
+                  handleParsedMarkdownRef.current(
+                    result.htmlContent,
+                    result.metadata
+                  );
+                }
+              })
+              .catch((err) => {
+                console.error("Failed to parse pasted markdown:", err);
+              });
+
             return true;
           }
         }
@@ -1666,19 +1637,15 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
-        if (
-          (currentFilePath || isNewFile) &&
-          githubConfig &&
-          !isSaveModalOpen
-        ) {
-          handleSaveClick();
+        if ((currentFilePath || isNewFile) && githubConfig) {
+          handleSave();
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentFilePath, githubConfig, isSaveModalOpen]);
+  }, [currentFilePath, githubConfig]);
 
   // Check for file parameter in URL and load it (after editor is initialized)
   useEffect(() => {
@@ -2191,10 +2158,23 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
                 )}
               </div>
 
+              {/* Staging Panel */}
+              {githubConfig && (
+                <StagingPanel
+                  githubConfig={githubConfig}
+                  onCommit={() => {
+                    // Reload file after commit if we have a current file
+                    if (currentFilePath) {
+                      loadFileFromGitHub(currentFilePath);
+                    }
+                  }}
+                />
+              )}
+
               {/* Save Button */}
               {(currentFilePath || isNewFile) && githubConfig && (
                 <button
-                  onClick={handleSaveClick}
+                  onClick={handleSave}
                   disabled={saveStatus === "saving"}
                   className={clsx(
                     "px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2",
@@ -2477,6 +2457,8 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
         isOpen={isMetadataOpen}
         onClose={() => setIsMetadataOpen(false)}
         isNewFile={isNewFile}
+        articleContent={editor?.getHTML() || ""}
+        onGetArticleContent={() => editor?.getHTML() || ""}
       />
 
       {/* History Panel */}
@@ -2597,152 +2579,6 @@ export default function Editor({ onMetadataChange }: EditorProps = {}) {
       )}
 
       {/* Save Modal with Diff View */}
-      {isSaveModalOpen && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/20 z-40 transition-opacity"
-            onClick={() => !isSaving && setIsSaveModalOpen(false)}
-            aria-hidden="true"
-          />
-
-          {/* Modal */}
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="save-modal-title"
-          >
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
-              {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-                <h2
-                  id="save-modal-title"
-                  className="text-xl font-semibold text-gray-900"
-                >
-                  Review Changes Before Saving
-                </h2>
-                <button
-                  onClick={() => !isSaving && setIsSaveModalOpen(false)}
-                  disabled={isSaving}
-                  className="p-2 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  aria-label="Close save modal"
-                  aria-disabled={isSaving}
-                >
-                  <svg
-                    className="w-5 h-5 text-gray-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-
-              {/* Diff Content */}
-              <div className="flex-1 overflow-auto p-6">
-                <div className="mb-4">
-                  <p className="text-sm text-gray-600 mb-2">
-                    {isNewFile ? (
-                      <>
-                        Creating new file:{" "}
-                        <code className="bg-gray-100 px-1 rounded">
-                          {currentFilePath ||
-                            `${articleMetadata.slug || "untitled"}.md`}
-                        </code>
-                      </>
-                    ) : (
-                      <>
-                        Changes to{" "}
-                        <code className="bg-gray-100 px-1 rounded">
-                          {currentFilePath}
-                        </code>
-                      </>
-                    )}
-                  </p>
-                  {fileChangedRemotely && (
-                    <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-md">
-                      <p className="text-sm text-orange-800">
-                        ⚠️ This file has been modified on GitHub. Saving will
-                        overwrite remote changes. Consider reloading first to
-                        see the latest version.
-                      </p>
-                    </div>
-                  )}
-                </div>
-                <div className="border border-gray-200 rounded-md overflow-hidden">
-                  <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 text-xs font-medium text-gray-700">
-                    <span className="text-red-600">-</span> Removed lines |{" "}
-                    <span className="text-green-600">+</span> Added lines
-                  </div>
-                  <div className="max-h-96 overflow-auto p-4 bg-white">
-                    <DiffView
-                      oldContent={originalMarkdown}
-                      newContent={getFullMarkdown()}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Commit Message Input */}
-              <div className="px-6 py-4 border-t border-gray-200 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Commit Message <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={commitMessage}
-                    onChange={(e) => setCommitMessage(e.target.value)}
-                    placeholder="Describe your changes..."
-                    disabled={isSaving}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                        e.preventDefault();
-                        handleSave();
-                      }
-                    }}
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    Press Cmd/Ctrl+Enter to save
-                  </p>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center justify-end gap-3">
-                  <button
-                    onClick={() => setIsSaveModalOpen(false)}
-                    disabled={isSaving}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving || !commitMessage.trim()}
-                    className={clsx(
-                      "px-4 py-2 text-sm font-medium rounded-md transition-colors",
-                      isSaving || !commitMessage.trim()
-                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                        : "bg-gray-900 text-white hover:bg-gray-800"
-                    )}
-                  >
-                    {isSaving ? "Saving..." : "Save & Commit"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
 
       {/* Export to Google Docs Confirmation Modal */}
       {isExportModalOpen && (
